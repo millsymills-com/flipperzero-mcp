@@ -12,7 +12,6 @@ class FlipperTransport(ABC):
     Provides a common interface for different connection methods:
     - USB Serial
     - WiFi (ESP32)
-    - Bluetooth LE
     """
 
     def __init__(self, config: dict):
@@ -129,6 +128,6 @@ class FlipperTransport(ABC):
         Get transport name for logging.
 
         Returns:
-            Transport name (e.g., "USB", "WiFi", "BLE")
+            Transport name (e.g., "USB", "WiFi")
         """
         return self.__class__.__name__.replace("Transport", "")

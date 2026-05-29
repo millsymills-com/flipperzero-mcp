@@ -27,8 +27,7 @@ class AutoTransport(FlipperTransport):
     {
       "type": "auto",
       "usb": {...},
-      "wifi": {...},
-      "bluetooth": {...}
+      "wifi": {...}
     }
     """
 
