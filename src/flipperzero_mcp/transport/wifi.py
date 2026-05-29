@@ -105,6 +105,12 @@ class WiFiTransport(FlipperTransport):
         except TimeoutError:
             return b""
         except (ConnectionResetError, BrokenPipeError):
+            logger.debug(
+                "WiFi connection dropped during receive (%s:%s)",
+                self.host,
+                self.port,
+                exc_info=True,
+            )
             self.connected = False
             return b""
 

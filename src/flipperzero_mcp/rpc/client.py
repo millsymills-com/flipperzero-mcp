@@ -15,6 +15,16 @@ logger = logging.getLogger(__name__)
 
 _HEALTH_PROBE = b"mcp_health"
 
+_NORMALIZED_SOURCE_KEYS = {
+    "hardware_name",
+    "name",
+    "hardware_model",
+    "hardware",
+    "firmware_version",
+    "firmware",
+    "version",
+}
+
 
 class FlipperClient:
     """Connect/health/device-info wrapper around a transport + ProtobufRPC."""
@@ -47,6 +57,7 @@ class FlipperClient:
             self.last_connection_error = str(exc)
         self.connected = False
         self.rpc = None
+        self._sd_card_available = None
 
     async def get_connection_health(self, probe_rpc: bool = True) -> dict[str, Any]:
         ts = datetime.now(UTC).isoformat()
@@ -65,6 +76,8 @@ class FlipperClient:
                     rpc_responsive = echoed == _HEALTH_PROBE
                 except (OSError, RuntimeError) as exc:
                     self.last_connection_error = str(exc)
+                if not rpc_responsive and self.last_connection_error is None:
+                    self.last_connection_error = "RPC ping unanswered"
 
         connected = transport_connected and (rpc_responsive if probe_rpc else True)
         return {
@@ -88,11 +101,7 @@ class FlipperClient:
             "name": info.get("hardware_name") or info.get("name") or "Flipper Zero",
             "hardware": info.get("hardware_model") or info.get("hardware") or "Unknown",
             "firmware": info.get("firmware_version") or info.get("firmware") or "Unknown",
-            **{
-                k: v
-                for k, v in info.items()
-                if k not in {"hardware_name", "name", "hardware_model"}
-            },
+            **{k: v for k, v in info.items() if k not in _NORMALIZED_SOURCE_KEYS},
         }
 
     async def check_sd_card_available(self) -> bool:

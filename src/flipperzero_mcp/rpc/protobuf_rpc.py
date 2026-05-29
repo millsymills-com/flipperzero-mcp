@@ -534,6 +534,7 @@ class ProtobufRPC:
                 timeout=3.0,
             )
         except Exception:
+            logger.debug("storage_list(%s) timed out or failed", path, exc_info=True)
             return names
 
     async def storage_list_detailed(
@@ -557,6 +558,7 @@ class ProtobufRPC:
                 timeout=3.0,
             )
         except Exception:
+            logger.debug("storage_list_detailed(%s) timed out or failed", path, exc_info=True)
             return entries
 
     async def _storage_list_internal(
@@ -659,6 +661,7 @@ class ProtobufRPC:
         try:
             return await asyncio.wait_for(self._storage_read_internal(path), timeout=3.0)
         except Exception:
+            logger.debug("storage_read(%s) timed out or failed", path, exc_info=True)
             return b""
 
     async def _storage_read_internal(self, path: str) -> bytes:
@@ -719,6 +722,7 @@ class ProtobufRPC:
         try:
             return await asyncio.wait_for(self._storage_mkdir_internal(path), timeout=3.0)
         except Exception:
+            logger.debug("storage_mkdir(%s) timed out or failed", path, exc_info=True)
             return False
 
     async def _storage_mkdir_internal(self, path: str) -> bool:
@@ -745,6 +749,7 @@ class ProtobufRPC:
                 self._storage_delete_internal(path, recursive=recursive), timeout=3.0
             )
         except Exception:
+            logger.debug("storage_delete(%s) timed out or failed", path, exc_info=True)
             return False
 
     async def _storage_delete_internal(self, path: str, recursive: bool = False) -> bool:
@@ -770,6 +775,7 @@ class ProtobufRPC:
         try:
             return await asyncio.wait_for(self._storage_write_internal(path, content), timeout=3.0)
         except Exception:
+            logger.debug("storage_write(%s) timed out or failed", path, exc_info=True)
             return False
 
     async def _storage_write_internal(self, path: str, content: bytes) -> bool:

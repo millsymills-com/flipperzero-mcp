@@ -118,6 +118,22 @@ async def test_health_rpc_responsive_false_when_ping_raises(monkeypatch):
     assert client.last_connection_error == "no echo"
 
 
+async def test_health_rpc_unresponsive_records_reason_when_ping_returns_none(monkeypatch):
+    class NoEchoRPC(FakeRPC):
+        async def ping(self, data=b"ping"):  # noqa: ARG002
+            return None
+
+    monkeypatch.setattr("flipperzero_mcp.rpc.client.ProtobufRPC", NoEchoRPC)
+    client = FlipperClient(FakeTransport())
+    await client.connect()
+    health = await client.get_connection_health(probe_rpc=True)
+    assert health["transport_connected"] is True
+    assert health["rpc_responsive"] is False
+    assert health["connected"] is False
+    assert health["last_error"] == "RPC ping unanswered"
+    assert client.last_connection_error == "RPC ping unanswered"
+
+
 async def test_health_without_probe_reports_none(monkeypatch):
     monkeypatch.setattr("flipperzero_mcp.rpc.client.ProtobufRPC", FakeRPC)
     client = FlipperClient(FakeTransport())

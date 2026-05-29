@@ -97,8 +97,7 @@ class FlipperTransport(ABC):
             chunk = await self.receive(timeout=remaining)
             if not chunk:
                 # Avoid tight loop if transport returns empty on timeout.
-                if deadline is None:
-                    await asyncio.sleep(0)
+                await asyncio.sleep(0)
                 continue
             self._rx_buffer.extend(chunk)
 
