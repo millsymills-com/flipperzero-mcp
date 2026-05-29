@@ -15,9 +15,11 @@ or WiFi.
 
 - **stdout is the JSON-RPC channel.** All logging goes to stderr (see
   `_logging.py`). Never `print` to stdout.
-- **Protobuf runtime is pinned to `protobuf==6.33.2`** to match the vendored
-  bindings in `src/flipperzero_mcp/rpc/protobuf_gen/`. Regenerate the bindings
-  if you change the pin or the `.proto` sources in `proto/`.
+- **Protobuf runtime is pinned to `protobuf==6.33.5`** (forward-compatible with
+  the vendored bindings in `src/flipperzero_mcp/rpc/protobuf_gen/`, which embed a
+  6.33.2 assertion; bumped for CVE-2026-0994). Keep the pin's major.minor at
+  `6.33`. Regenerate the bindings if you change the pin's major.minor or the
+  `.proto` sources in `proto/`.
 - **Harvest provenance.** The transport layer
   (`src/flipperzero_mcp/transport/`), the protobuf RPC implementation
   (`src/flipperzero_mcp/rpc/protobuf_rpc.py` and `proto/`), and the ESP32

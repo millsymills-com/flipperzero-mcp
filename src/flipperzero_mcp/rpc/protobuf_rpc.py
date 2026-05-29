@@ -393,6 +393,7 @@ class ProtobufRPC:
         try:
             return await asyncio.wait_for(self._get_device_info_internal(), timeout=6.0)
         except (TimeoutError, Exception):
+            logger.debug("get_device_info timed out or failed", exc_info=True)
             return info
 
     async def _get_device_info_internal(self) -> dict[str, Any]:  # noqa: PLR0912
@@ -484,6 +485,7 @@ class ProtobufRPC:
         try:
             return await asyncio.wait_for(self._get_property_internal(key), timeout=2.0)
         except (TimeoutError, Exception):
+            logger.debug("get_property(%s) timed out or failed", key, exc_info=True)
             return None
 
     async def _get_property_internal(self, key: str) -> str | None:

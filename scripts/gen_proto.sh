@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 # Regenerate protobuf bindings. WARNING: the protoc used here MUST emit a runtime
-# version assertion matching the `protobuf` runtime pin (==6.33.2 in pyproject),
+# version assertion matching the `protobuf` runtime pin major.minor (6.33 in pyproject),
 # or the generated *_pb2.py will raise RuntimeVersionError at import. grpcio-tools
 # bundles its own protoc whose version may NOT match — verify before relying on this.
 OUT="src/flipperzero_mcp/rpc/protobuf_gen"
