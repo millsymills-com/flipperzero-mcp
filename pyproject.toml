@@ -99,7 +99,18 @@ filterwarnings = ["error"]
 [tool.coverage.run]
 source = ["flipperzero_mcp"]
 branch = true
-omit = ["tests/*","src/flipperzero_mcp/__main__.py","src/flipperzero_mcp/rpc/protobuf_gen/*"]
+# These modules are hardware/IO-coupled (live serial/socket I/O and Flipper RPC
+# session negotiation over a real transport) and are validated by the opt-in
+# tests/integration/ suite against a real device, not by unit tests. The varint
+# framing codec inside protobuf_rpc IS unit-tested via tests/property/test_framing.py.
+omit = [
+    "tests/*",
+    "src/flipperzero_mcp/__main__.py",
+    "src/flipperzero_mcp/rpc/protobuf_gen/*",
+    "src/flipperzero_mcp/rpc/protobuf_rpc.py",
+    "src/flipperzero_mcp/transport/usb.py",
+    "src/flipperzero_mcp/transport/wifi.py",
+]
 
 [tool.coverage.report]
 show_missing = true
