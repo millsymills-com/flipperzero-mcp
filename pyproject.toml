@@ -78,6 +78,12 @@ unresolved-attribute = "error"
 invalid-argument-type = "error"
 invalid-return-type = "error"
 
+[tool.ty.analysis]
+# Generated protobuf modules build their message classes dynamically via the
+# descriptor pool, so their attributes are statically invisible. Treat them as
+# Any to avoid false unresolved-attribute errors in consumers.
+replace-imports-with-any = ["flipperzero_mcp.rpc.protobuf_gen.**"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
