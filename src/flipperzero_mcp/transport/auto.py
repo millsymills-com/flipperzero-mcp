@@ -105,6 +105,7 @@ class AutoTransport(FlipperTransport):
         try:
             return bool(await self._active.is_connected())
         except (OSError, RuntimeError):
+            logger.debug("active transport is_connected() raised", exc_info=True)
             return False
 
     def get_name(self) -> str:

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING
 
 from flipperzero_mcp.errors import FlipperNotConnectedError
@@ -11,6 +12,8 @@ if TYPE_CHECKING:
 
     from flipperzero_mcp.rpc.client import FlipperClient
     from flipperzero_mcp.server import ServerContext
+
+logger = logging.getLogger(__name__)
 
 
 def get_server_context(ctx: Context) -> ServerContext:
@@ -37,7 +40,7 @@ async def ensure_connected(ctx: Context) -> FlipperClient:
         if await client.transport.is_connected():
             return client
     except (OSError, RuntimeError):
-        pass  # transport check failed — fall through to reconnect attempt
+        logger.debug("transport.is_connected() raised; attempting reconnect", exc_info=True)
     await client.disconnect()
     if await client.connect():
         return client
