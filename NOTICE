@@ -1,0 +1,13 @@
+flipperzero-mcp
+Copyright (c) 2026 millsmillsymills
+
+This product includes software harvested from the flipperzero-mcp project
+by Chris Busse (https://github.com/busse/flipperzero-mcp), used under the MIT
+License:
+
+    MIT License
+    Copyright (c) 2024 Flipper MCP Contributors
+
+The harvested portions are the transport layer (src/flipperzero_mcp/transport/),
+the protobuf RPC implementation (src/flipperzero_mcp/rpc/protobuf_rpc.py and
+proto/), and the ESP32 WiFi-bridge firmware (firmware/tcp_uart_bridge/).

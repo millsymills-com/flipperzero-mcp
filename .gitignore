@@ -1,0 +1,16 @@
+__pycache__/
+*.py[cod]
+build/
+dist/
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.coverage
+htmlcov/
+.ruff_cache/
+.ty_cache/
+.DS_Store
+.env
+firmware/tcp_uart_bridge/sdkconfig
+*.log
