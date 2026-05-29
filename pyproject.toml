@@ -50,6 +50,7 @@ flipperzero-mcp = "flipperzero_mcp.__main__:main"
 target-version = "py313"
 line-length = 100
 src = ["src", "tests"]
+extend-exclude = ["firmware"]
 
 [tool.ruff.lint]
 select = ["E","W","F","I","N","UP","B","S","A","C4","DTZ","T20","SIM","TCH","RUF","PT","ARG","PTH","ERA","PL","PERF","FURB","LOG","TID"]
