@@ -1,0 +1,14 @@
+Source: https://github.com/flipperdevices/flipperzero-protobuf
+Vendored via: github.com/busse/flipperzero-mcp (proto/ directory)
+Commit/date: UNKNOWN-UPSTREAM — .protos and generated _pb2.py copied from
+             busse/flipperzero-mcp on 2026-05-29. Upstream did not record the
+             flipperzero-protobuf source commit.
+Bindings: src/flipperzero_mcp/rpc/protobuf_gen/*_pb2.py were generated upstream
+          with protoc 6.33.2 and are vendored as-is. They embed a runtime
+          version assertion of 6.33.2; the protobuf runtime is pinned to
+          ==6.33.5 in pyproject (bumped from 6.33.2 for CVE-2026-0994). 6.33.5
+          is a forward-compatible patch of the same major.minor, so the 6.33.2
+          assertion is satisfied at import.
+Regeneration: see scripts/gen_proto.sh — NOT run in CI; only use with a protoc
+          whose major.minor matches the protobuf runtime pin, or the generated
+          files will assert a mismatched runtime version at import.

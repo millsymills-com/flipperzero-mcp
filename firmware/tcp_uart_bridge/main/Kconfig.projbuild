@@ -1,0 +1,47 @@
+menu "TCP-UART Bridge Configuration"
+
+    config BRIDGE_TCP_PORT
+        int "TCP Server Port"
+        default 8080
+        help
+            Port number for the TCP server that clients connect to.
+
+    config BRIDGE_UART_BAUD_RATE
+        int "UART Baud Rate"
+        default 230400
+        help
+            Target baud rate for Flipper Expansion Protocol after negotiation.
+
+    config BRIDGE_UART_TX_PIN
+        int "UART TX GPIO Pin"
+        default 43
+        help
+            GPIO pin for UART TX (connects to Flipper RX pin 14).
+
+    config BRIDGE_UART_RX_PIN
+        int "UART RX GPIO Pin"
+        default 44
+        help
+            GPIO pin for UART RX (connects to Flipper TX pin 13).
+
+    config BRIDGE_AP_SSID
+        string "Captive Portal AP SSID"
+        default "FlipperBridge"
+        help
+            SSID for the configuration captive portal.
+
+    config BRIDGE_AP_PASSWORD
+        string "Captive Portal AP Password"
+        default ""
+        help
+            Password for the configuration captive portal (min 8 chars).
+            Set this before flashing; the firmware rejects passwords under
+            8 characters.
+
+    config BRIDGE_MAX_CLIENTS
+        int "Maximum TCP Clients"
+        default 1
+        help
+            Maximum number of simultaneous TCP client connections.
+
+endmenu

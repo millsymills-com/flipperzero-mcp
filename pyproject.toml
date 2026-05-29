@@ -24,7 +24,7 @@ classifiers = [
 dependencies = [
     "fastmcp>=3.2.4,<4.0.0",
     "pyserial>=3.5",
-    "protobuf==6.33.2",
+    "protobuf==6.33.5",
     "pydantic>=2.13.3",
     "pydantic-settings>=2.14.0",
 ]
@@ -50,6 +50,7 @@ flipperzero-mcp = "flipperzero_mcp.__main__:main"
 target-version = "py313"
 line-length = 100
 src = ["src", "tests"]
+extend-exclude = ["firmware"]
 
 [tool.ruff.lint]
 select = ["E","W","F","I","N","UP","B","S","A","C4","DTZ","T20","SIM","TCH","RUF","PT","ARG","PTH","ERA","PL","PERF","FURB","LOG","TID"]
@@ -78,6 +79,12 @@ unresolved-attribute = "error"
 invalid-argument-type = "error"
 invalid-return-type = "error"
 
+[tool.ty.analysis]
+# Generated protobuf modules build their message classes dynamically via the
+# descriptor pool, so their attributes are statically invisible. Treat them as
+# Any to avoid false unresolved-attribute errors in consumers.
+replace-imports-with-any = ["flipperzero_mcp.rpc.protobuf_gen.**"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
@@ -92,7 +99,18 @@ filterwarnings = ["error"]
 [tool.coverage.run]
 source = ["flipperzero_mcp"]
 branch = true
-omit = ["tests/*","src/flipperzero_mcp/__main__.py","src/flipperzero_mcp/rpc/protobuf_gen/*"]
+# These modules are hardware/IO-coupled (live serial/socket I/O and Flipper RPC
+# session negotiation over a real transport) and are validated by the opt-in
+# tests/integration/ suite against a real device, not by unit tests. The varint
+# framing codec inside protobuf_rpc IS unit-tested via tests/property/test_framing.py.
+omit = [
+    "tests/*",
+    "src/flipperzero_mcp/__main__.py",
+    "src/flipperzero_mcp/rpc/protobuf_gen/*",
+    "src/flipperzero_mcp/rpc/protobuf_rpc.py",
+    "src/flipperzero_mcp/transport/usb.py",
+    "src/flipperzero_mcp/transport/wifi.py",
+]
 
 [tool.coverage.report]
 show_missing = true

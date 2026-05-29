@@ -138,9 +138,15 @@ Tiered, mirroring house style:
   framing codec — it's a parser, the right place for generative tests.
 - **Integration** (`tests/integration/`): opt-in (env-gated), real USB **and** WiFi
   against the on-hand hardware.
-- **Coverage gate: ~80%** on hand-written, non-generated Python. `_ensure_rpc_session_started`
-  (~130 LOC of hardware-only session negotiation) is `# pragma: no cover`-excluded and
-  documented as integration-only — a 90% gate would be dishonest given hardware coupling.
+- **Coverage gate: 80%** on the hand-written glue (config, errors, client, server,
+  `_common`, tools, `_logging`, transport factory/selection/buffering) — measured at
+  ~95%. The hardware/IO-coupled harvested modules (`rpc/protobuf_rpc.py`,
+  `transport/usb.py`, `transport/wifi.py`) are omitted from the unit-coverage
+  denominator and validated by the opt-in integration tests against a real device
+  instead — unit-testing live serial/socket I/O and RPC session negotiation without
+  hardware would be low-value. The varint framing codec inside `protobuf_rpc.py` is
+  still unit-tested via the property tests. (This is broader than excluding only
+  `_ensure_rpc_session_started`, which the original draft anticipated.)
 
 ## 6. Safety & write-tool gating (later phases)
 
