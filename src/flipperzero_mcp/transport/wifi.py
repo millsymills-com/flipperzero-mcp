@@ -49,7 +49,7 @@ class WiFiTransport(FlipperTransport):
             await self._drain_socket_buffer(max_seconds=0.2)
             return True
         except (TimeoutError, OSError) as e:
-            logger.info(f"WiFi connection failed: {e}")
+            logger.warning(f"WiFi connection failed: {e}")
             self.connected = False
             return False
 

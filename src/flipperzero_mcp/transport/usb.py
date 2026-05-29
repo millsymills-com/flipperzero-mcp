@@ -118,7 +118,7 @@ class USBTransport(FlipperTransport):
             return True
 
         except (serial.SerialException, OSError) as e:
-            logger.info(f"USB connection failed: {e}")
+            logger.warning(f"USB connection failed: {e}")
             self.connected = False
             return False
 
