@@ -10,11 +10,18 @@ Uses generated protobuf code from proto/ directory.
 import asyncio
 import logging
 import os
+import time
 from typing import TYPE_CHECKING, Any
 
 from flipperzero_mcp.transport.base import FlipperTransport
 
 logger = logging.getLogger(__name__)
+
+# When CLI->RPC negotiation fails, skip re-running the multi-second probe/switch
+# sequence on every subsequent RPC for this long. Bounds both log spam and per-call
+# latency while a Flipper sits in CLI mode, yet stays short enough that recovery
+# (e.g. the device entering RPC mode) is picked up promptly.
+_NEGOTIATION_COOLDOWN_SECONDS = 5.0
 
 # Import generated protobuf classes
 try:
@@ -70,6 +77,7 @@ class ProtobufRPC:
         self.transport = transport
         self.command_id = 0
         self._rpc_session_started = False
+        self._last_negotiation_failure: float | None = None
 
     def _get_next_command_id(self) -> int:
         """Get next command ID for RPC calls."""
@@ -151,6 +159,12 @@ class ProtobufRPC:
         if self._rpc_session_started:
             return
 
+        if (
+            self._last_negotiation_failure is not None
+            and time.monotonic() - self._last_negotiation_failure < _NEGOTIATION_COOLDOWN_SECONDS
+        ):
+            return
+
         async def drain_host_rx(max_seconds: float = 0.6) -> None:
             """
             Drain any pending device->host bytes (CLI banner/prompt/echo).
@@ -159,8 +173,6 @@ class ProtobufRPC:
             CLI output bytes as the first RPC response varint length prefix.
             """
             try:
-                import time
-
                 end = time.monotonic() + max_seconds
                 while time.monotonic() < end:
                     chunk = await self.transport.receive(timeout=0.05)
@@ -286,9 +298,11 @@ class ProtobufRPC:
 
         self._rpc_session_started = bool(ok)
         if not ok:
+            self._last_negotiation_failure = time.monotonic()
             logger.warning(
                 "start_rpc_session negotiation failed after 3 attempts; is the Flipper in "
-                "CLI mode? Each later RPC call will keep retrying negotiation until it succeeds."
+                "CLI mode? Later RPC calls retry negotiation at most once every %.0fs.",
+                _NEGOTIATION_COOLDOWN_SECONDS,
             )
 
     async def _send_rpc_message(
