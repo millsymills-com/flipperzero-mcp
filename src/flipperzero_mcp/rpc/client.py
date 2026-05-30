@@ -129,6 +129,11 @@ class FlipperClient:
         }
 
     async def check_sd_card_available(self) -> bool:
+        """Report whether an SD card is mounted at /ext.
+
+        The result is cached for the lifetime of the current connection; the
+        cache is reset on every connect/disconnect.
+        """
         if self._sd_card_available is not None:
             return self._sd_card_available
         available = False

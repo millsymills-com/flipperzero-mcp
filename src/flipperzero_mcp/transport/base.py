@@ -28,39 +28,36 @@ class FlipperTransport(ABC):
 
     @abstractmethod
     async def connect(self) -> bool:
-        """
-        Establish connection to Flipper Zero.
+        """Establish a connection to the Flipper Zero.
 
         Returns:
-            True if connection successful, False otherwise
+            True if the connection succeeded, False otherwise.
         """
         pass
 
     @abstractmethod
     async def disconnect(self) -> None:
-        """Close connection to Flipper Zero."""
+        """Close the connection to the Flipper Zero."""
         pass
 
     @abstractmethod
     async def send(self, data: bytes) -> None:
-        """
-        Send data to Flipper Zero.
+        """Send data to the Flipper Zero.
 
         Args:
-            data: Raw bytes to send
+            data: Raw bytes to send.
         """
         pass
 
     @abstractmethod
     async def receive(self, timeout: float | None = None) -> bytes:
-        """
-        Receive data from Flipper Zero.
+        """Receive data from the Flipper Zero.
 
         Args:
-            timeout: Optional timeout in seconds
+            timeout: Optional timeout in seconds.
 
         Returns:
-            Received bytes
+            The received bytes.
         """
         pass
 
@@ -114,11 +111,10 @@ class FlipperTransport(ABC):
 
     @abstractmethod
     async def is_connected(self) -> bool:
-        """
-        Check if transport is connected.
+        """Check whether the transport is connected.
 
         Returns:
-            True if connected, False otherwise
+            True if connected, False otherwise.
         """
         pass
 

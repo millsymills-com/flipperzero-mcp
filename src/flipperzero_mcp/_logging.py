@@ -37,9 +37,9 @@ class JSONFormatter(logging.Formatter):
 def configure_logging(level: int = logging.INFO) -> None:
     """Bind a stderr ``StreamHandler`` with ``JSONFormatter`` to the root logger.
 
-    Idempotent: subsequent calls replace the handler list rather than
-    appending, so test runners that ``importlib.reload`` the module don't
-    double-up handlers.
+    Idempotent: each call clears the root logger's handlers before adding its
+    own, so calling ``configure_logging`` more than once never stacks duplicate
+    handlers.
     """
     root = logging.getLogger()
     root.setLevel(level)
