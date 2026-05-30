@@ -15,7 +15,7 @@ class FakeContextObj:
 
 
 class FakeClient:
-    def __init__(self, *, up, reconnects_to):
+    def __init__(self, *, up, reconnects_to, is_connected_raises=None):
         self._up = up
         self._reconnects_to = reconnects_to
         self.disconnect_calls = 0
@@ -24,6 +24,8 @@ class FakeClient:
 
         class _T:
             async def is_connected(self):
+                if is_connected_raises is not None:
+                    raise is_connected_raises
                 return up
 
         self.transport = _T()
@@ -56,3 +58,12 @@ async def test_ensure_connected_raises_when_reconnect_fails():
     ctx = FakeCtx(FakeContextObj(client))
     with pytest.raises(FlipperNotConnectedError):
         await _common.ensure_connected(ctx)
+
+
+@pytest.mark.parametrize("exc", [OSError("io"), RuntimeError("loop")])
+async def test_ensure_connected_reconnects_when_is_connected_raises(exc):
+    client = FakeClient(up=True, reconnects_to=True, is_connected_raises=exc)
+    ctx = FakeCtx(FakeContextObj(client))
+    await _common.ensure_connected(ctx)
+    assert client.disconnect_calls == 1
+    assert client.connect_calls == 1
