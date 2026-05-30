@@ -6,6 +6,7 @@ from typing import Any
 
 from fastmcp import Context, FastMCP
 
+from flipperzero_mcp.rpc.client import ReconnectHealth
 from flipperzero_mcp.tools._common import get_client
 
 
@@ -22,7 +23,7 @@ def register_connection_tools(mcp: FastMCP) -> None:
         Returns:
             Health dict: connected, transport_connected, rpc_responsive, transport, last_error.
         """
-        return await get_client(ctx).get_connection_health(probe_rpc=probe_rpc)
+        return dict(await get_client(ctx).get_connection_health(probe_rpc=probe_rpc))
 
     @mcp.tool(tags={"flipper", "connection"})
     async def flipper_connection_reconnect(ctx: Context, probe_rpc: bool = True) -> dict[str, Any]:
@@ -38,5 +39,5 @@ def register_connection_tools(mcp: FastMCP) -> None:
         await client.disconnect()
         reconnect_ok = await client.connect()
         health = await client.get_connection_health(probe_rpc=probe_rpc)
-        health["reconnect_ok"] = reconnect_ok
-        return health
+        result: ReconnectHealth = {**health, "reconnect_ok": reconnect_ok}
+        return dict(result)
