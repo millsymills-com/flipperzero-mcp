@@ -179,10 +179,7 @@ class ProtobufRPC:
             logger.debug("clear_receive_buffer failed", exc_info=True)
 
         # Give the device a moment to finish emitting the CLI banner/prompt after opening the port.
-        try:
-            await asyncio.sleep(0.3)
-        except Exception:
-            logger.debug("initial settle sleep failed", exc_info=True)
+        await asyncio.sleep(0.3)
 
         async def probe_rpc(timeout: float = 0.4) -> bool:
             """
@@ -276,10 +273,7 @@ class ProtobufRPC:
             except Exception:
                 logger.debug("clear_receive_buffer failed", exc_info=True)
             # Give the device a moment to switch modes before probing.
-            try:
-                await asyncio.sleep(0.2)
-            except Exception:
-                logger.debug("mode-switch settle sleep failed", exc_info=True)
+            await asyncio.sleep(0.2)
 
             return await probe_rpc(timeout=1.2)
 
@@ -291,6 +285,11 @@ class ProtobufRPC:
             ok = await start_session_attempt()
 
         self._rpc_session_started = bool(ok)
+        if not ok:
+            logger.warning(
+                "start_rpc_session negotiation failed after 3 attempts; is the Flipper in "
+                "CLI mode? Each later RPC call will keep retrying negotiation until it succeeds."
+            )
 
     async def _send_rpc_message(
         self,
