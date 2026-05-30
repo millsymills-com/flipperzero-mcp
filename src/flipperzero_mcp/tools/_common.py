@@ -29,8 +29,8 @@ def get_client(ctx: Context) -> FlipperClient:
 async def ensure_connected(ctx: Context) -> FlipperClient:
     """Guarantee a live transport, attempting one reconnect on a mid-session drop.
 
-    Replaces upstream's central call_tool reconnect wrapper. Every hardware-touching
-    tool calls this first; the connection tools do NOT (they must run while down).
+    Every hardware-touching tool calls this first; the connection tools do NOT
+    (they must run while the device is down).
 
     Raises:
         FlipperNotConnectedError: if the device is down and a single reconnect fails.

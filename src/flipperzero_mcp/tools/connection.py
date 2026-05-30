@@ -20,7 +20,8 @@ def register_connection_tools(mcp: FastMCP) -> None:
             probe_rpc: If true, send a protobuf RPC ping to confirm RPC responsiveness.
 
         Returns:
-            Health dict: connected, transport_connected, rpc_responsive, transport, last_error.
+            Health dict: timestamp, connected, transport_connected, rpc_responsive,
+            transport, last_error.
         """
         return await get_client(ctx).get_connection_health(probe_rpc=probe_rpc)
 

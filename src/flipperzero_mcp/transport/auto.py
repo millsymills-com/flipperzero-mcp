@@ -1,6 +1,7 @@
 """Auto transport: prefer USB, fall back to WiFi when configured.
 
-This transport is designed to support a *single* MCP client configuration.
+Holds at most one active underlying transport at a time (USB or WiFi), chosen
+on connect.
 
 Selection policy:
 - Try USB first
