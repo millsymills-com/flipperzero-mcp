@@ -1,3 +1,6 @@
+import pytest
+from pydantic import ValidationError
+
 from flipperzero_mcp.config import FlipperConfig
 
 
@@ -23,3 +26,18 @@ def test_as_transport_config_shape():
 def test_usb_port_omitted_when_unset():
     tc = FlipperConfig(_env_file=None).as_transport_config()["transport"]
     assert "port" not in tc["usb"]
+
+
+def test_wifi_transport_without_host_rejected():
+    with pytest.raises(ValidationError, match="wifi_host"):
+        FlipperConfig(_env_file=None, transport="wifi")
+
+
+def test_wifi_transport_with_host_accepted():
+    cfg = FlipperConfig(_env_file=None, transport="wifi", wifi_host="10.0.0.2")
+    assert cfg.transport == "wifi"
+
+
+def test_auto_transport_without_wifi_host_allowed():
+    cfg = FlipperConfig(_env_file=None, transport="auto")
+    assert cfg.wifi_configured is False

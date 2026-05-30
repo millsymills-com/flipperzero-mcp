@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import Field
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -29,6 +29,12 @@ class FlipperConfig(BaseSettings):
     def wifi_configured(self) -> bool:
         """WiFi is usable only when a host is explicitly set."""
         return bool(self.wifi_host and self.wifi_host.strip())
+
+    @model_validator(mode="after")
+    def _require_wifi_host_for_wifi_transport(self) -> FlipperConfig:
+        if self.transport == "wifi" and not self.wifi_configured:
+            raise ValueError("transport='wifi' requires wifi_host (FLIPPER_WIFI_HOST) to be set")
+        return self
 
     def as_transport_config(self) -> dict[str, Any]:
         """Build the nested dict shape expected by transport.get_transport()."""

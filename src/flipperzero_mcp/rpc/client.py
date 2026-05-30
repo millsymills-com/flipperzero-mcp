@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, TypedDict
 
 from flipperzero_mcp.rpc.protobuf_rpc import ProtobufRPC
 
@@ -12,6 +12,30 @@ if TYPE_CHECKING:
     from flipperzero_mcp.transport.base import FlipperTransport
 
 logger = logging.getLogger(__name__)
+
+
+class TransportInfo(TypedDict):
+    """Transport identity reported in connection health."""
+
+    type: str
+
+
+class ConnectionHealth(TypedDict):
+    """Authoritative connection-health snapshot returned by get_connection_health."""
+
+    timestamp: str
+    connected: bool
+    transport_connected: bool
+    rpc_responsive: bool | None
+    transport: TransportInfo
+    last_error: str | None
+
+
+class ReconnectHealth(ConnectionHealth):
+    """Connection health plus the outcome of an explicit reconnect attempt."""
+
+    reconnect_ok: bool
+
 
 _HEALTH_PROBE = b"mcp_health"
 
@@ -59,7 +83,7 @@ class FlipperClient:
         self.rpc = None
         self._sd_card_available = None
 
-    async def get_connection_health(self, probe_rpc: bool = True) -> dict[str, Any]:
+    async def get_connection_health(self, probe_rpc: bool = True) -> ConnectionHealth:
         ts = datetime.now(UTC).isoformat()
         transport_connected = False
         try:

@@ -19,7 +19,7 @@ from flipperzero_mcp.transport import get_transport
 logger = logging.getLogger(__name__)
 
 
-@dataclass
+@dataclass(frozen=True)
 class ServerContext:
     """Lifespan context passed to all tools via ctx.lifespan_context."""
 
