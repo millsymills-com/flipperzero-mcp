@@ -4,7 +4,9 @@
 
 **Goal:** Add a USB-only CLI text channel, one gated `flipper_cli_exec` tool, and bundled MCP reference/workflow resources + prompts, so Claude can drive the Flipper's full CLI surface guided by server-provided documentation.
 
-**Architecture:** A new `cli/` package adds a link-mode manager (`CLIChannel`) that leaves the RPC session (`StopSession`), drains to the `>:` prompt, runs one command, and strips echo/prompt. `ProtobufRPC` gains the missing RPC→CLI direction. `FlipperClient` gains an end-to-end I/O lock so CLI round-trips and RPC probes never interleave on the shared serial port. A `flipper_cli_exec` tool exposes the channel, gating transmit/destructive commands behind an explicit acceptance flag. Reference and workflow knowledge ships as bundled markdown served via `@mcp.resource`, with two `@mcp.prompt` entry points.
+**Architecture:** A new `cli/` package adds a link-mode manager (`CLIChannel`) that leaves the RPC session (`StopSession`), drains to the `>:` prompt, runs one command, and strips echo/prompt. `ProtobufRPC` gains the missing RPC→CLI direction. `FlipperClient` owns a single `_io_lock` that **both** the CLI path and the RPC-initiating client methods acquire at the top of each round-trip, so CLI and RPC exchanges never interleave on the shared serial port. A `flipper_cli_exec` tool exposes the channel and returns a typed result; transmit/destructive commands are gated behind an operator env flag (`FLIPPER_ENABLE_TX_TOOLS`, the PROTO-006 control) **and** a per-call `i_accept_responsibility` intent flag. Transport CLI availability is exposed as an explicit `supports_cli_text_mode` capability rather than name-sniffing. Reference and workflow knowledge ships as bundled markdown served via `@mcp.resource`, with two `@mcp.prompt` entry points.
+
+**Namespace:** This repo officially adopts the **`flipper_`** tool prefix (a documented PROTO-002 deviation; the literal rule would be `flipperzero_`). Task 0 renames the shipped `systeminfo_get` → `flipper_system_info` so the surface is consistent before the new tool lands.
 
 **Tech Stack:** Python 3.13, `uv`, FastMCP 3.x, pyserial, protobuf 6.33.5 (vendored bindings), pytest + pytest-asyncio (`asyncio_mode=auto`), ruff, ty.
 
@@ -21,9 +23,72 @@
 
 ---
 
+### Task 0: Namespace rename + transmit-tools config flag
+
+Two repo-wide prerequisites the later tasks depend on: rename `systeminfo_get` to
+`flipper_system_info` (PROTO-002 consistency — this repo's adopted `flipper_`
+namespace) and add the operator env flag that gates transmit/destructive commands
+(PROTO-006).
+
+**Files:**
+- Modify: `src/flipperzero_mcp/tools/systeminfo.py`
+- Modify: `src/flipperzero_mcp/config.py`
+- Modify: `tests/unit/test_tool_systeminfo.py` (rename references), `README.md`
+- Test: `tests/unit/test_config.py` (append)
+
+- [ ] **Step 1: Rename the tool**
+
+In `src/flipperzero_mcp/tools/systeminfo.py`, rename the registered function
+`systeminfo_get` → `flipper_system_info` (the function name is the tool name).
+Keep the body unchanged. Update its docstring's first line accordingly.
+
+- [ ] **Step 2: Update every reference to the old name**
+
+Grep the repo for `systeminfo_get` and update each hit to `flipper_system_info`:
+existing tests (`tests/unit/test_tool_systeminfo.py`), the README tool table, and
+the server `instructions` string. Run `rg -n systeminfo_get` and confirm zero
+remaining hits (outside this plan doc).
+
+- [ ] **Step 3: Add the transmit-tools env flag**
+
+In `src/flipperzero_mcp/config.py`, add a field to `FlipperConfig` (env prefix is
+already `flipper_`, so this reads `FLIPPER_ENABLE_TX_TOOLS`):
+
+```python
+    enable_tx_tools: bool = False
+```
+
+Append to `tests/unit/test_config.py`:
+
+```python
+def test_tx_tools_disabled_by_default():
+    assert FlipperConfig(_env_file=None).enable_tx_tools is False
+
+
+def test_tx_tools_enabled_from_env(monkeypatch):
+    monkeypatch.setenv("FLIPPER_ENABLE_TX_TOOLS", "true")
+    assert FlipperConfig(_env_file=None).enable_tx_tools is True
+```
+
+- [ ] **Step 4: Run tests, lint, format, type-check**
+
+Run: `uv run pytest tests/unit/test_tool_systeminfo.py tests/unit/test_config.py -q && uv run ruff check && uv run ruff format --check && uv run ty check`
+Expected: PASS, no errors, no remaining `systeminfo_get` references.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src/flipperzero_mcp/tools/systeminfo.py src/flipperzero_mcp/config.py tests README.md
+git commit -m "refactor: rename systeminfo_get->flipper_system_info; add FLIPPER_ENABLE_TX_TOOLS"
+```
+
+---
+
 ### Task 1: CLI command safety classifier
 
-Classifies a raw CLI command line as benign, destructive, or transmit/regulated. The tool uses this to gate execution behind an explicit acceptance flag (spec Safety amendment).
+Classifies a raw CLI command line as benign, destructive, or transmit/regulated, deciding *which* commands require gating.
+
+> **Trust-boundary note.** This is an ordered prefix **denylist** and therefore fails open: anything unlisted (e.g. `loader open <app>` launching an app that transmits, future subcommands, argument reordering) is treated as benign. It is **defense-in-depth / advisory**, not the security boundary. The real control is the operator env flag `FLIPPER_ENABLE_TX_TOOLS` (Task 0) checked alongside the per-call acceptance flag in `cli_exec` (Task 5). Keep the lists conservative but do not rely on them to be exhaustive.
 
 **Files:**
 - Create: `src/flipperzero_mcp/cli/__init__.py`
@@ -230,6 +295,24 @@ async def test_stop_rpc_session_is_noop_when_not_started():
 
     assert rpc.rpc_session_started is False
     assert len(rpc.transport.sent) == 0
+
+
+class FailingTransport(RecordingTransport):
+    async def send(self, data: bytes) -> None:
+        raise OSError("link dropped")
+
+
+async def test_stop_rpc_session_keeps_flag_and_raises_on_send_failure():
+    import pytest
+
+    rpc = ProtobufRPC(FailingTransport())
+    rpc._rpc_session_started = True
+
+    with pytest.raises(OSError):
+        await rpc.stop_rpc_session()
+
+    # Flag must stay set: the device is still in RPC mode.
+    assert rpc.rpc_session_started is True
 ```
 
 - [ ] **Step 2: Run the test to verify it fails**
@@ -250,23 +333,30 @@ In `src/flipperzero_mcp/rpc/protobuf_rpc.py`, add these methods to the `Protobuf
     async def stop_rpc_session(self) -> None:
         """Return the device to CLI text mode by sending StopSession.
 
-        No-op when no RPC session is active. Always clears the session flag so a
-        subsequent RPC call re-negotiates the session.
+        No-op when no RPC session is active. On a successful send the session flag
+        is cleared (device is back in CLI mode). On a send failure the flag is
+        **left set** and the error propagates: clearing it would let the next CLI
+        round-trip run against a device still in RPC mode and corrupt the stream.
+
+        Raises:
+            OSError | FlipperProtocolError: if the StopSession send fails.
         """
         if not self._rpc_session_started:
             return
+        msg = flipper_pb2.Main()
+        msg.command_id = self._get_next_command_id()
+        msg.has_next = False
+        msg.stop_session.CopyFrom(flipper_pb2.StopSession())
+        payload = msg.SerializeToString()
         try:
-            msg = flipper_pb2.Main()
-            msg.command_id = self._get_next_command_id()
-            msg.has_next = False
-            msg.stop_session.CopyFrom(flipper_pb2.StopSession())
-            payload = msg.SerializeToString()
             await self.transport.send(self._encode_varint(len(payload)) + payload)
-        except Exception:
-            logger.debug("stop_rpc_session send failed", exc_info=True)
-        finally:
-            self._rpc_session_started = False
+        except (OSError, FlipperProtocolError):
+            logger.warning("StopSession send failed; device may still be in RPC mode", exc_info=True)
+            raise
+        self._rpc_session_started = False
 ```
+
+> **Why no `except Exception` + `finally`:** a failed mode switch that silently clears the flag is the exact corruption case Task 4/5 guard against. Narrow the catch to the transport/serialization errors actually expected (`OSError`, `FlipperProtocolError`); ensure both are importable in this module. The test below covers the success path; add a third test asserting the flag stays set and the error propagates when `transport.send` raises `OSError`.
 
 - [ ] **Step 4: Run the test to verify it passes**
 
@@ -370,19 +460,41 @@ git commit -m "feat(errors): add CLI unavailable/refused exceptions"
 
 ### Task 4: CLIChannel link-mode manager
 
-Sends one command in CLI mode and returns stripped output plus a completeness flag. Rejects WiFi. Leaves the RPC session first.
+Sends one command in CLI mode and returns stripped output plus a completeness flag. Rejects transports without CLI text mode. Leaves the RPC session first.
+
+`CLIChannel` does **not** own a lock: serialization against RPC round-trips is the caller's job (Task 5 acquires `FlipperClient._io_lock` around the whole exchange). Transport CLI availability is read from an explicit `supports_cli_text_mode` capability, not by sniffing the transport name.
 
 **Files:**
+- Modify: `src/flipperzero_mcp/transport/base.py`, `transport/usb.py` (add capability)
 - Create: `src/flipperzero_mcp/cli/channel.py`
 - Test: `tests/unit/test_cli_channel.py`
+
+- [ ] **Step 0: Add the `supports_cli_text_mode` transport capability**
+
+In `src/flipperzero_mcp/transport/base.py`, add a default property to `FlipperTransport` (default `False` — a new transport opts in explicitly):
+
+```python
+    @property
+    def supports_cli_text_mode(self) -> bool:
+        """True when the transport can carry the Flipper CLI text shell (USB CDC)."""
+        return False
+```
+
+In `src/flipperzero_mcp/transport/usb.py`, override it on `USBTransport`:
+
+```python
+    @property
+    def supports_cli_text_mode(self) -> bool:
+        return True
+```
+
+`WiFiTransport` inherits the `False` default (the bridge speaks protobuf only).
 
 - [ ] **Step 1: Write the failing test**
 
 Create `tests/unit/test_cli_channel.py`:
 
 ```python
-import asyncio
-
 import pytest
 
 from flipperzero_mcp.cli.channel import CLIChannel
@@ -392,14 +504,15 @@ from flipperzero_mcp.errors import FlipperCLIUnavailableError
 class ScriptedTransport:
     """Transport that replays a queued sequence of receive() chunks."""
 
-    def __init__(self, chunks, name="USB"):
+    def __init__(self, chunks, supports_cli=True):
         self._chunks = list(chunks)
-        self._name = name
+        self._supports_cli = supports_cli
         self.sent = bytearray()
         self.cleared = 0
 
-    def get_name(self):
-        return self._name
+    @property
+    def supports_cli_text_mode(self):
+        return self._supports_cli
 
     async def send(self, data: bytes) -> None:
         self.sent.extend(data)
@@ -430,20 +543,18 @@ class StubRPC:
 async def test_exec_strips_echo_and_prompt():
     # Prompt-drain for enter_cli, then command echo + output + prompt.
     transport = ScriptedTransport([b">: ", b"device info\r\n", b"hardware: flipper\r\n", b">: "])
-    channel = CLIChannel(transport, StubRPC(), asyncio.Lock())
+    channel = CLIChannel(transport, StubRPC())
 
     output, complete = await channel.exec("device info", timeout_s=1.0)
 
     assert complete is True
-    assert "hardware: flipper" in output
-    assert "device info" not in output.splitlines()[0:1] or output.startswith("hardware")
-    assert ">:" not in output
+    assert output == "hardware: flipper"  # echoed command line and prompt both gone
 
 
 async def test_exec_leaves_rpc_session_first():
     transport = ScriptedTransport([b">: ", b">: "])
     rpc = StubRPC(started=True)
-    channel = CLIChannel(transport, rpc, asyncio.Lock())
+    channel = CLIChannel(transport, rpc)
 
     await channel.exec("storage info /ext", timeout_s=1.0)
 
@@ -453,7 +564,7 @@ async def test_exec_leaves_rpc_session_first():
 async def test_exec_times_out_returns_incomplete():
     # No prompt ever returned after the command -> streaming/never-terminating case.
     transport = ScriptedTransport([b">: ", b"scanning...\r\n"])
-    channel = CLIChannel(transport, StubRPC(), asyncio.Lock())
+    channel = CLIChannel(transport, StubRPC())
 
     output, complete = await channel.exec("subghz rx 433920000", timeout_s=0.3)
 
@@ -461,9 +572,9 @@ async def test_exec_times_out_returns_incomplete():
     assert "scanning" in output
 
 
-async def test_exec_rejects_wifi_transport():
-    transport = ScriptedTransport([], name="WiFi")
-    channel = CLIChannel(transport, StubRPC(), asyncio.Lock())
+async def test_exec_rejects_transport_without_cli_text_mode():
+    transport = ScriptedTransport([], supports_cli=False)
+    channel = CLIChannel(transport, StubRPC())
 
     with pytest.raises(FlipperCLIUnavailableError):
         await channel.exec("device info", timeout_s=1.0)
@@ -479,7 +590,14 @@ Expected: FAIL — `ModuleNotFoundError: No module named 'flipperzero_mcp.cli.ch
 Create `src/flipperzero_mcp/cli/channel.py`:
 
 ```python
-"""USB-only CLI text-mode channel with RPC<->CLI mode arbitration."""
+"""USB-only CLI text-mode channel with RPC<->CLI mode arbitration.
+
+Holds no lock of its own: the caller (FlipperClient.cli_exec) serializes this
+exchange against RPC round-trips by holding FlipperClient._io_lock around the
+whole call. Acquiring a lock here too would deadlock (stop_rpc_session runs under
+the same held lock) or, if it were a different lock, would not actually serialize
+against RPC — the bug this design avoids.
+"""
 
 from __future__ import annotations
 
@@ -489,8 +607,6 @@ from typing import TYPE_CHECKING
 from flipperzero_mcp.errors import FlipperCLIUnavailableError
 
 if TYPE_CHECKING:
-    import asyncio
-
     from flipperzero_mcp.rpc.protobuf_rpc import ProtobufRPC
     from flipperzero_mcp.transport.base import FlipperTransport
 
@@ -499,27 +615,24 @@ _READ_SLICE_S = 0.2
 
 
 class CLIChannel:
-    """Run single CLI commands over a USB transport, reading to the `>:` prompt.
+    """Run single CLI commands over a CLI-capable transport, reading to `>:`.
 
-    Not usable over the WiFi bridge transport, which speaks protobuf only.
+    Not usable over transports without CLI text mode (e.g. the WiFi bridge, which
+    speaks protobuf only); those are rejected via supports_cli_text_mode.
     """
 
     def __init__(
         self,
         transport: FlipperTransport,
         rpc: ProtobufRPC | None,
-        io_lock: asyncio.Lock,
     ) -> None:
         self._transport = transport
         self._rpc = rpc
-        self._io_lock = io_lock
-
-    def _is_wifi(self) -> bool:
-        name = str(self._transport.get_name() or "").lower()
-        return "wifi" in name or hasattr(self._transport, "host")
 
     async def exec(self, command: str, timeout_s: float = 10.0) -> tuple[str, bool]:
         """Run one CLI command and return (stripped_output, completed_to_prompt).
+
+        The caller must hold FlipperClient._io_lock for the duration.
 
         Args:
             command: The raw CLI command line (no trailing CR needed).
@@ -529,15 +642,15 @@ class CLIChannel:
         Raises:
             FlipperCLIUnavailableError: if the active transport has no CLI mode.
         """
-        if self._is_wifi():
+        if not self._transport.supports_cli_text_mode:
             raise FlipperCLIUnavailableError(
-                "CLI text mode is unavailable over the WiFi bridge transport (USB only)"
+                "CLI text mode is unavailable on this transport (USB only; the WiFi "
+                "bridge speaks protobuf RPC only)"
             )
-        async with self._io_lock:
-            await self._enter_cli()
-            self._transport.clear_receive_buffer()
-            await self._transport.send(command.encode() + b"\r")
-            raw, complete = await self._read_until_prompt(timeout_s)
+        await self._enter_cli()
+        self._transport.clear_receive_buffer()
+        await self._transport.send(command.encode() + b"\r")
+        raw, complete = await self._read_until_prompt(timeout_s)
         return _strip(raw, command), complete
 
     async def _enter_cli(self) -> None:
@@ -578,21 +691,23 @@ Expected: PASS (4 passed).
 
 - [ ] **Step 5: Lint, format, type-check**
 
-Run: `uv run ruff format src/flipperzero_mcp/cli/channel.py tests/unit/test_cli_channel.py && uv run ruff check src/flipperzero_mcp/cli/channel.py tests/unit/test_cli_channel.py && uv run ty check`
+Run: `uv run ruff format src/flipperzero_mcp/cli/channel.py src/flipperzero_mcp/transport/base.py src/flipperzero_mcp/transport/usb.py tests/unit/test_cli_channel.py && uv run ruff check src/flipperzero_mcp/cli/channel.py src/flipperzero_mcp/transport tests/unit/test_cli_channel.py && uv run ty check`
 Expected: no errors.
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add src/flipperzero_mcp/cli/channel.py tests/unit/test_cli_channel.py
-git commit -m "feat(cli): add CLIChannel link-mode manager (USB-only)"
+git add src/flipperzero_mcp/cli/channel.py src/flipperzero_mcp/transport/base.py src/flipperzero_mcp/transport/usb.py tests/unit/test_cli_channel.py
+git commit -m "feat(cli): add CLIChannel link-mode manager + supports_cli_text_mode capability"
 ```
 
 ---
 
-### Task 5: Wire `cli_exec` into FlipperClient with an I/O lock
+### Task 5: Wire `cli_exec` into FlipperClient with a shared I/O lock
 
-The client owns the lock shared by CLI round-trips and RPC probes so they can't interleave on the serial port (spec: widen the lock).
+The client owns the single `_io_lock` that serializes CLI round-trips **and** RPC round-trips on the serial port (spec: widen the lock to span both paths). `cli_exec` also enforces the two-gate transmit/destructive policy: the operator env flag (`tx_tools_enabled`, threaded in from `FlipperConfig.enable_tx_tools` by the tool in Task 6) **and** the per-call `accept_responsibility`.
+
+> **Lock correctness (review #4).** A lock that only `cli_exec` takes does not stop a concurrent `flipper_connection_health` RPC ping from interleaving bytes mid-drain — the exact corruption the spec set out to kill. So this task also wraps the RPC-initiating client methods (`get_connection_health`'s ping, `get_device_info`, `check_sd_card_available`) in `async with self._io_lock`. Lower-level helpers (`stop_rpc_session`, `_ensure_rpc_session_started`) must **not** acquire it — they run while a top-level caller already holds it, and asyncio locks are not reentrant.
 
 **Files:**
 - Modify: `src/flipperzero_mcp/rpc/client.py` (class `FlipperClient`)
@@ -603,6 +718,8 @@ The client owns the lock shared by CLI round-trips and RPC probes so they can't 
 Create `tests/unit/test_client_cli.py`:
 
 ```python
+import asyncio
+
 import pytest
 
 from flipperzero_mcp.errors import FlipperCLIRefusedError, FlipperNotConnectedError
@@ -610,13 +727,17 @@ from flipperzero_mcp.rpc.client import FlipperClient
 
 
 class FakeTransport:
-    def __init__(self, name="USB"):
-        self._name = name
+    def __init__(self, supports_cli=True):
+        self._supports_cli = supports_cli
         self.sent = bytearray()
         self._chunks = [b">: ", b"name: Flipper\r\n", b">: "]
 
+    @property
+    def supports_cli_text_mode(self):
+        return self._supports_cli
+
     def get_name(self):
-        return self._name
+        return "USB"
 
     async def connect(self):
         return True
@@ -648,20 +769,36 @@ async def test_cli_exec_runs_benign_command():
     assert result["risk"] == "benign"
 
 
-async def test_cli_exec_refuses_transmit_without_acceptance():
+async def test_cli_exec_refuses_transmit_when_env_gate_off():
+    client = FlipperClient(FakeTransport())
+    await client.connect()
+
+    # tx_tools_enabled defaults False -> refused regardless of acceptance.
+    with pytest.raises(FlipperCLIRefusedError):
+        await client.cli_exec(
+            "subghz tx 0x00 433920000 200 10", timeout_s=1.0, accept_responsibility=True
+        )
+
+
+async def test_cli_exec_refuses_transmit_with_env_on_but_no_acceptance():
     client = FlipperClient(FakeTransport())
     await client.connect()
 
     with pytest.raises(FlipperCLIRefusedError):
-        await client.cli_exec("subghz tx 0x00 433920000 200 10", timeout_s=1.0)
+        await client.cli_exec(
+            "subghz tx 0x00 433920000 200 10", timeout_s=1.0, tx_tools_enabled=True
+        )
 
 
-async def test_cli_exec_runs_transmit_with_acceptance():
+async def test_cli_exec_runs_transmit_with_both_gates():
     client = FlipperClient(FakeTransport())
     await client.connect()
 
     result = await client.cli_exec(
-        "subghz tx 0x00 433920000 200 10", timeout_s=1.0, accept_responsibility=True
+        "subghz tx 0x00 433920000 200 10",
+        timeout_s=1.0,
+        accept_responsibility=True,
+        tx_tools_enabled=True,
     )
 
     assert result["risk"] == "transmit"
@@ -673,6 +810,29 @@ async def test_cli_exec_without_connection_raises():
     # No connect() -> no rpc/channel yet.
     with pytest.raises(FlipperNotConnectedError):
         await client.cli_exec("device info", timeout_s=1.0)
+
+
+async def test_rpc_round_trip_blocks_while_cli_holds_lock():
+    """A concurrent RPC ping must not interleave with a CLI round-trip."""
+    client = FlipperClient(FakeTransport())
+    await client.connect()
+
+    order: list[str] = []
+
+    async def slow_cli():
+        async with client._io_lock:
+            order.append("cli-start")
+            await asyncio.sleep(0.05)
+            order.append("cli-end")
+
+    async def rpc_after():
+        await asyncio.sleep(0.01)  # ensure CLI grabs the lock first
+        async with client._io_lock:
+            order.append("rpc")
+
+    await asyncio.gather(slow_cli(), rpc_after())
+
+    assert order == ["cli-start", "cli-end", "rpc"]
 ```
 
 - [ ] **Step 2: Run the test to verify it fails**
@@ -700,6 +860,31 @@ In `FlipperClient.__init__`, add at the end:
         self._io_lock = asyncio.Lock()
 ```
 
+Wrap the three existing RPC round-trips in the shared lock so they can't interleave with a CLI exchange. In `get_connection_health`, guard the ping:
+
+```python
+                try:
+                    async with self._io_lock:
+                        echoed = await self.rpc.ping(_HEALTH_PROBE)
+                    rpc_responsive = echoed == _HEALTH_PROBE
+```
+
+In `get_device_info`, wrap the call:
+
+```python
+        try:
+            async with self._io_lock:
+                info = await self.rpc.get_device_info()
+```
+
+In `check_sd_card_available`, wrap the call:
+
+```python
+            try:
+                async with self._io_lock:
+                    info = await self.rpc.storage_info("/ext")
+```
+
 Add this method to `FlipperClient` (after `check_sd_card_available`):
 
 ```python
@@ -708,29 +893,42 @@ Add this method to `FlipperClient` (after `check_sd_card_available`):
         command: str,
         timeout_s: float = 10.0,
         accept_responsibility: bool = False,
+        tx_tools_enabled: bool = False,
     ) -> dict[str, Any]:
         """Run one Flipper CLI command in CLI text mode (USB only).
+
+        Transmit/destructive commands need both gates: the operator env flag
+        (tx_tools_enabled, from FLIPPER_ENABLE_TX_TOOLS) and per-call
+        accept_responsibility. Either missing -> refused.
 
         Args:
             command: Raw CLI command line.
             timeout_s: Seconds to wait for the `>:` prompt.
-            accept_responsibility: Required True to run transmit/destructive commands.
+            accept_responsibility: Per-call intent for gated commands.
+            tx_tools_enabled: Operator opt-in (server env flag) for gated commands.
 
         Returns:
             Dict with output, completed, risk, and warning keys.
 
         Raises:
             FlipperNotConnectedError: if no live transport/RPC is available.
-            FlipperCLIRefusedError: if a gated command lacks acceptance.
+            FlipperCLIRefusedError: if a gated command lacks the env flag or acceptance.
             FlipperCLIUnavailableError: if the transport has no CLI mode.
         """
         if self.rpc is None:
             raise FlipperNotConnectedError(self.last_connection_error or "device unavailable")
         risk = classify_command(command)
-        if risk.requires_acceptance and not accept_responsibility:
-            raise FlipperCLIRefusedError(risk.warning or "command requires acceptance")
-        channel = CLIChannel(self.transport, self.rpc, self._io_lock)
-        output, completed = await channel.exec(command, timeout_s=timeout_s)
+        if risk.requires_acceptance:
+            if not tx_tools_enabled:
+                raise FlipperCLIRefusedError(
+                    "transmit/destructive commands are disabled on this server; the "
+                    "operator must set FLIPPER_ENABLE_TX_TOOLS=true to allow them"
+                )
+            if not accept_responsibility:
+                raise FlipperCLIRefusedError(risk.warning or "command requires acceptance")
+        channel = CLIChannel(self.transport, self.rpc)
+        async with self._io_lock:
+            output, completed = await channel.exec(command, timeout_s=timeout_s)
         return {
             "output": output,
             "completed": completed,
@@ -784,12 +982,16 @@ from flipperzero_mcp.server import create_server
 
 
 class FakeTransport:
-    def __init__(self, name="USB"):
-        self._name = name
+    def __init__(self, supports_cli=True):
+        self._supports_cli = supports_cli
         self._chunks = [b">: ", b"name: Flipper\r\n", b">: "]
 
+    @property
+    def supports_cli_text_mode(self):
+        return self._supports_cli
+
     def get_name(self):
-        return self._name
+        return "USB" if self._supports_cli else "WiFi"
 
     async def connect(self):
         return True
@@ -825,12 +1027,12 @@ class FakeRPC:
         return data
 
 
-def _make_server(monkeypatch, transport_name="USB"):
+def _make_server(monkeypatch, *, supports_cli=True, config=None):
     monkeypatch.setattr(
-        "flipperzero_mcp.server.get_transport", lambda _t, _c: FakeTransport(transport_name)
+        "flipperzero_mcp.server.get_transport", lambda _t, _c: FakeTransport(supports_cli)
     )
     monkeypatch.setattr("flipperzero_mcp.rpc.client.ProtobufRPC", FakeRPC)
-    return create_server(FlipperConfig(_env_file=None))
+    return create_server(config or FlipperConfig(_env_file=None))
 
 
 async def test_cli_exec_tool_benign(monkeypatch):
@@ -841,17 +1043,29 @@ async def test_cli_exec_tool_benign(monkeypatch):
         assert result.data["risk"] == "benign"
 
 
-async def test_cli_exec_tool_refuses_tx_without_acceptance(monkeypatch):
-    server = _make_server(monkeypatch)
+async def test_cli_exec_tool_refuses_tx_when_env_disabled(monkeypatch):
+    server = _make_server(monkeypatch)  # FLIPPER_ENABLE_TX_TOOLS off by default
     async with Client(server) as client:
         with pytest.raises(ToolError):
             await client.call_tool(
-                "flipper_cli_exec", {"command": "subghz tx 0x00 433920000 200 10"}
+                "flipper_cli_exec",
+                {"command": "subghz tx 0x00 433920000 200 10", "i_accept_responsibility": True},
             )
 
 
-async def test_cli_exec_tool_errors_on_wifi(monkeypatch):
-    server = _make_server(monkeypatch, transport_name="WiFi")
+async def test_cli_exec_tool_runs_tx_when_env_enabled_and_accepted(monkeypatch):
+    config = FlipperConfig(_env_file=None, enable_tx_tools=True)
+    server = _make_server(monkeypatch, config=config)
+    async with Client(server) as client:
+        result = await client.call_tool(
+            "flipper_cli_exec",
+            {"command": "subghz tx 0x00 433920000 200 10", "i_accept_responsibility": True},
+        )
+        assert result.data["risk"] == "transmit"
+
+
+async def test_cli_exec_tool_errors_without_cli_transport(monkeypatch):
+    server = _make_server(monkeypatch, supports_cli=False)
     async with Client(server) as client:
         with pytest.raises(ToolError):
             await client.call_tool("flipper_cli_exec", {"command": "device info"})
@@ -871,12 +1085,21 @@ Create `src/flipperzero_mcp/tools/cli.py`:
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TypedDict
 
 from fastmcp import Context, FastMCP
 
 from flipperzero_mcp.errors import handle_client_error
-from flipperzero_mcp.tools._common import ensure_connected
+from flipperzero_mcp.tools._common import ensure_connected, get_server_context
+
+
+class CliExecResult(TypedDict):
+    """Structured result of a single CLI command execution."""
+
+    output: str
+    completed: bool
+    risk: str
+    warning: str | None
 
 
 def register_cli_tools(mcp: FastMCP) -> None:
@@ -888,7 +1111,7 @@ def register_cli_tools(mcp: FastMCP) -> None:
         command: str,
         timeout_s: float = 10.0,
         i_accept_responsibility: bool = False,
-    ) -> dict[str, Any]:
+    ) -> CliExecResult:
         """Run one Flipper CLI command over USB and return its output.
 
         Reads the Flipper CLI reference resource (flipper://reference/cli) to choose
@@ -897,22 +1120,28 @@ def register_cli_tools(mcp: FastMCP) -> None:
         will time out with completed=false and partial output.
 
         Transmit/destructive commands (subghz tx, ir tx, rfid write, ikey write,
-        factory reset, storage format, power off/reboot, update install) are refused
-        unless i_accept_responsibility is true.
+        factory reset, storage format, power off/reboot, update install) require BOTH
+        the operator env flag FLIPPER_ENABLE_TX_TOOLS=true and i_accept_responsibility
+        =true; either missing and the command is refused.
 
         Args:
             command: Raw CLI command line, e.g. "storage list /ext".
             timeout_s: Seconds to wait for the `>:` prompt (default 10).
-            i_accept_responsibility: Set true to run gated transmit/destructive commands.
+            i_accept_responsibility: Per-call intent for gated transmit/destructive commands.
 
         Returns:
-            Dict with output (str), completed (bool), risk (str), warning (str|None).
+            CliExecResult with output (str), completed (bool), risk (str), warning (str|None).
         """
         try:
+            config = get_server_context(ctx).config
             client = await ensure_connected(ctx)
-            return await client.cli_exec(
-                command, timeout_s=timeout_s, accept_responsibility=i_accept_responsibility
+            result = await client.cli_exec(
+                command,
+                timeout_s=timeout_s,
+                accept_responsibility=i_accept_responsibility,
+                tx_tools_enabled=config.enable_tx_tools,
             )
+            return CliExecResult(**result)
         except Exception as e:
             handle_client_error(e)
 ```
@@ -1106,8 +1335,8 @@ Create `src/flipperzero_mcp/resources/workflow_install_app.md`:
 ```markdown
 # Workflow: Install an app
 
-1. Confirm USB connection: call `systeminfo_get` (or `flipper_connection_health`).
-2. Ensure the SD card is present (`systeminfo_get` -> sd_card_available).
+1. Confirm USB connection: call `flipper_system_info` (or `flipper_connection_health`).
+2. Ensure the SD card is present (`flipper_system_info` -> sd_card_available).
 3. Place the `.fap` on the SD card under `/ext/apps/<Category>/`. In v1, push the
    file with the CLI (`storage write chunk ...`) or qFlipper; typed
    `flipper_app_install` arrives in v2.
@@ -1161,35 +1390,38 @@ the `>:` prompt and so are NOT usable via v1 `flipper_cli_exec` (it will time ou
 with partial output). Use the Flipper UI or saved files for capture in v1.
 
 Replaying or transmitting (`subghz tx`, `ir tx`, `rfid write`, `ikey write`) is
-gated: `flipper_cli_exec` refuses these unless `i_accept_responsibility=true`.
-Transmitting outside permitted frequencies/power is illegal in most regions and
-is the operator's responsibility.
+gated behind two independent controls: the server operator must set
+`FLIPPER_ENABLE_TX_TOOLS=true` **and** the call must pass
+`i_accept_responsibility=true`. With either missing, `flipper_cli_exec` refuses
+the command. Transmitting outside permitted frequencies/power is illegal in most
+regions and is the operator's responsibility.
 
 Typed capture/replay tools with a cancellation-aware streaming model and per-tool
 region/legality confirmation arrive in v3.
 ```
 
-- [ ] **Step 6: Ensure markdown is packaged by hatchling**
+- [ ] **Step 6: Confirm markdown is packaged by hatchling (likely no change needed)**
 
-In `pyproject.toml`, add a wheel target section (after the `[project.scripts]` block or near other `[tool.*]` sections):
+`pyproject.toml` **already** has the wheel target:
 
 ```toml
 [tool.hatch.build.targets.wheel]
 packages = ["src/flipperzero_mcp"]
-artifacts = ["*.md"]
 ```
+
+Do **not** add a second `[tool.hatch.build.targets.wheel]` table — that is a TOML duplicate-key error. hatchling already includes non-`.py` files that live inside a packaged directory, so the `.md` files under `src/flipperzero_mcp/resources/` are picked up by the existing `packages = [...]`. The Step 7 wheel check is the source of truth: if the `.md` files are present, change nothing here. Only if they are missing (e.g. excluded by `.gitignore`) **edit the existing table** to add `artifacts = ["**/*.md"]` — never create a new table.
 
 - [ ] **Step 7: Verify the files build into the package**
 
 Run: `uv build --wheel`
 Expected: build succeeds. Then:
 Run: `python -c "import zipfile,glob; z=zipfile.ZipFile(sorted(glob.glob('dist/*.whl'))[-1]); print([n for n in z.namelist() if n.endswith('.md')])"`
-Expected: lists `flipperzero_mcp/resources/reference_cli.md` and the other six `.md` files.
+Expected: lists `flipperzero_mcp/resources/reference_cli.md` and the other six `.md` files. If empty, apply the `artifacts` edit described in Step 6 and rebuild.
 
 - [ ] **Step 8: Commit**
 
 ```bash
-git add src/flipperzero_mcp/resources pyproject.toml
+git add src/flipperzero_mcp/resources  # add pyproject.toml too only if Step 6 required an edit
 git commit -m "feat(resources): add bundled CLI reference and workflow docs"
 ```
 
@@ -1383,11 +1615,12 @@ def register_prompts(mcp: FastMCP) -> None:
         """Orient the agent to manage a connected Flipper Zero."""
         return (
             "You are managing a Flipper Zero over USB via this MCP server.\n\n"
-            "1. Check the link with `systeminfo_get` (or `flipper_connection_health`).\n"
+            "1. Check the link with `flipper_system_info` (or `flipper_connection_health`).\n"
             "2. Read `flipper://reference/cli` for the command surface and "
             "`flipper://reference/filesystem` for SD-card layout.\n"
             "3. Run commands with `flipper_cli_exec` (USB only; one command per call).\n"
-            "4. Transmit/destructive commands require i_accept_responsibility=true.\n"
+            "4. Transmit/destructive commands need the server's FLIPPER_ENABLE_TX_TOOLS "
+            "flag set AND i_accept_responsibility=true on the call.\n"
             "5. For multi-step jobs, consult the relevant `flipper://workflow/*` resource."
         )
 
@@ -1457,7 +1690,7 @@ In `src/flipperzero_mcp/server.py`, extend the `instructions=` text in `create_s
 
 - [ ] **Step 2: Update README**
 
-In `README.md`, add `flipper_cli_exec` to the "Available tools" table and add a short "Resources & prompts" subsection listing the `flipper://` URIs and the two prompts. Add a one-line note: "CLI exec is USB-only; transmit/destructive commands require `i_accept_responsibility=true`."
+In `README.md`, rename `systeminfo_get` → `flipper_system_info` in the "Available tools" table (Task 0), add `flipper_cli_exec` to it, and add a short "Resources & prompts" subsection listing the `flipper://` URIs and the two prompts. Document the `FLIPPER_ENABLE_TX_TOOLS` env flag alongside the other `FLIPPER_*` settings. Add a one-line note: "CLI exec is USB-only; transmit/destructive commands require both `FLIPPER_ENABLE_TX_TOOLS=true` on the server and `i_accept_responsibility=true` on the call."
 
 - [ ] **Step 3: Update CHANGELOG**
 
@@ -1490,18 +1723,24 @@ git commit -m "docs: document flipper_cli_exec, resources, and prompts"
 ## Self-Review (completed by plan author)
 
 **Spec coverage:**
-- v1 `flipper_cli_exec` (USB-only, gated) → Tasks 1, 4, 5, 6. ✓
-- RPC→CLI `StopSession` direction → Task 2. ✓
-- Widened end-to-end I/O lock → Task 5 (`FlipperClient._io_lock`). ✓
+- v1 `flipper_cli_exec` (USB-only, two-gate) → Tasks 1, 4, 5, 6. ✓
+- Namespace consistency (`flipper_*`; `systeminfo_get` → `flipper_system_info`) → Task 0. ✓ (review #2)
+- RPC→CLI `StopSession` direction, **failure not swallowed** → Task 2. ✓ (review #5)
+- Single `_io_lock` spanning CLI **and** RPC round-trips → Task 5 (both `cli_exec` and the three RPC client methods acquire it; contention test). ✓ (review #4)
+- Two-gate transmit/destructive policy: env flag `FLIPPER_ENABLE_TX_TOOLS` (Task 0 config) + per-call `i_accept_responsibility`, enforced in `cli_exec` (Task 5), env value threaded by the tool (Task 6). ✓ (review #1)
+- Classifier is advisory defense-in-depth, not the boundary → Task 1 note. ✓ (review #3)
+- Transport capability `supports_cli_text_mode` replaces name-sniffing → Task 4. ✓ (review #8)
+- Typed `CliExecResult` output schema → Task 6. ✓ (review #7)
 - Streaming-command limitation surfaced → Task 4 (completed flag), Task 6 docstring, Task 7 capture-replay doc. ✓
-- WiFi-CLI rejection → Tasks 4, 6. ✓
 - Resources `flipper://reference/*` + `flipper://workflow/*` → Tasks 7, 8. ✓
 - Prompts `manage_flipper` / `troubleshoot_connection` → Task 9. ✓
-- Safety amendment (`i_accept_responsibility`) → Tasks 1, 5, 6. ✓
 - Resource content-lint / URI-resolve test → Task 8. ✓
 - Baud nuance + mode docs → Task 7 (`reference_connection.md`). ✓
+- No duplicate `[tool.hatch.build.targets.wheel]` table; rely on the existing one → Task 7 Step 6. ✓ (review #6)
 - v2/v3 items (file-transfer RPC md5sum, ufbt channel, esp32 contention, capture streaming model) intentionally deferred and only referenced in workflow docs. ✓
 
 **Placeholder scan:** No TBD/TODO; every code step contains complete code; README step (Task 10 Step 2) is prose-editing of an existing table, acceptable as it describes exact additions.
 
-**Type consistency:** `cli_exec` returns `{output, completed, risk, warning}` (Task 5) consumed unchanged by the tool (Task 6) and tests. `CLIChannel.exec` returns `(str, bool)` consistently (Tasks 4, 5). `classify_command -> CommandRisk(category, requires_acceptance, warning)` consistent across Tasks 1, 5. `rpc_session_started` property + `stop_rpc_session()` consistent across Tasks 2, 4.
+**Type consistency:** `cli_exec` returns `{output, completed, risk, warning}` (Task 5), wrapped into the typed `CliExecResult` by the tool (Task 6) and consumed unchanged by tests. `CLIChannel.exec` returns `(str, bool)` consistently (Tasks 4, 5) and holds no lock — arbitration is the caller's (Task 5). `classify_command -> CommandRisk(category, requires_acceptance, warning)` consistent across Tasks 1, 5. `rpc_session_started` property + `stop_rpc_session()` consistent across Tasks 2, 4. `supports_cli_text_mode` capability consistent across Tasks 4 (base/usb), 5, 6.
+
+**Review-comment resolution:** All nine PR-7 review points (#1 env gate, #2 namespace, #3 denylist-advisory, #4 shared lock, #5 no swallowed mode-switch failure, #6 no duplicate TOML table, #7 typed output, #8 capability not name-sniff, #9 tightened echo-strip assertion) are folded into the tasks above.

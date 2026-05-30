@@ -55,7 +55,8 @@ These facts shape v1 and were confirmed by reading the source:
 | Decision | Choice |
 |---|---|
 | v1 knowledge delivery | MCP **resources + prompts** (server-exposed, portable) |
-| v1 action surface | **One generic CLI exec tool** (full power, documented guardrails) — see Safety for one Codex-driven amendment awaiting confirmation |
+| v1 action surface | **One generic CLI exec tool**, transmit/destructive commands gated behind an operator env flag **plus** a per-call acceptance flag (see Safety) |
+| Tool namespace | This repo officially adopts the **`flipper_`** prefix (a documented PROTO-002 deviation; the literal rule would be `flipperzero_`). `systeminfo_get` is renamed `flipper_system_info` for consistency; new tools use `flipper_*`. |
 | v2+ priorities | All four: file transfer, app install/build, ESP32 flashing, radio capture/replay |
 | Existing tooling | **Supersede + rescue logic** — fold `flipctl.py` / `build_faps.py` into the MCP |
 | Foundation | Approach A: dual-mode link + bundled-markdown resources |
@@ -92,16 +93,17 @@ guided by bundled knowledge, through one generic action tool — over USB.
 
 ### New surface
 
-- **Tool `flipper_cli_exec(command: str, timeout_s: float = 10.0)`** — sends one
-  CLI line over the **USB** link in CLI-text mode; returns stripped output (echo
-  and trailing `>:` removed). One command per call; no shell chaining.
+- **Tool `flipper_cli_exec(command: str, timeout_s: float = 10.0,
+  i_accept_responsibility: bool = False)`** — sends one CLI line over the **USB**
+  link in CLI-text mode; returns a typed result (`output`, `completed`, `risk`,
+  `warning`). One command per call; no shell chaining.
   - **USB-only in v1.** When the active transport is WiFi, the tool returns a
     clear error: CLI text mode is unavailable over the WiFi bridge (see
-    Limitations). Adding WiFi CLI support is deferred (requires bridge/firmware
-    work).
+    Limitations). Transport capability is checked via an explicit
+    `supports_cli_text_mode` property on the transport, not by name-sniffing.
   - **Streaming commands are unsupported in v1** (see Limitations).
-  - **Safety gating** — see the Safety section; radio-TX commands are *not*
-    freely executable in v1 under the amended posture.
+  - **Safety gating** — see the Safety section; transmit/destructive commands
+    require the operator env flag **and** per-call acceptance.
 - **Resources** (bundled markdown under `src/flipperzero_mcp/resources/`, served
   via `@mcp.resource`):
   - `flipper://reference/cli` — complete CLI command reference (every subsystem,
@@ -130,10 +132,19 @@ Implement the link-mode manager + CLI channel:
 - Provide idempotent `enter_cli()` / `enter_rpc()` and a `mode()` query.
 - Drain the boot/banner output to a clean prompt before the first command (rescue
   `flipctl.py`'s drain loop).
-- **Widen the lock to span whole CLI round-trips.** The per-call `asyncio.Lock`
-  in `usb.py` does not prevent a concurrent `flipper_connection_health` RPC ping
-  from interleaving bytes mid-drain. Mode transitions and CLI command round-trips
-  must hold an exclusive lock end-to-end.
+- **Widen the lock to span whole CLI *and* RPC round-trips — one shared lock.**
+  The per-call `asyncio.Lock` in `usb.py` does not prevent a concurrent
+  `flipper_connection_health` RPC ping from interleaving bytes mid-drain. The fix
+  is a single `_io_lock` on `FlipperClient` that **both** paths acquire at the
+  top of each round-trip: `cli_exec` holds it across the whole CLI exchange, and
+  the RPC-initiating client methods (`get_connection_health`'s ping,
+  `get_device_info`, `check_sd_card_available`) hold the *same* lock across their
+  RPC exchange. A lock the CLI path takes but the RPC path does not would leave
+  exactly the interleaving this is meant to kill, so the lock must live where
+  both paths pass through (the client), and lower-level helpers like
+  `stop_rpc_session` must **not** re-acquire it (asyncio locks are not
+  reentrant). A unit test asserts an RPC ping blocks while a CLI round-trip holds
+  the lock.
 
 This supersedes `flipctl.py`'s serial logic for prompt-returning commands.
 
@@ -190,27 +201,38 @@ spec is the `flipper://workflow/*` doc written in v1.
 
 ## Cross-cutting concerns
 
-### Safety posture (one amendment from the Codex review — needs confirmation)
+### Safety posture (resolved)
 
 The locked decision was a single full-power exec tool. Codex flagged that an
 agent able to run `subghz tx` / `subghz tx from file` with only a warning string
 can transmit on arbitrary frequencies — an FCC Part 15 / CE RED violation with
-personal liability, and not an adequate control for an autonomous agent.
+personal liability. A per-call boolean the calling agent supplies *itself* is not
+a control against an autonomous agent: the model can set
+`i_accept_responsibility=True` with no human in the loop. `PROTO-006` (write
+tools require an explicit operator env-flag opt-in) exists precisely so a
+misconfigured server cannot mutate state regardless of what the model decides.
 
-**Amended default in this spec:** v1 `flipper_cli_exec` **refuses radio-TX
-commands** (`subghz tx*`, `rfid write`, `ikey write`, `ir tx*`, plus
-`factory reset` and `storage format`) unless an explicit
-`i_accept_responsibility=True` argument is passed in the same call. Read/scan/RX
-and all benign commands run freely. This keeps the "one tool, full reach"
-shape while putting a deliberate gate in front of physically-transmitting,
-destructive, or regulated actions. Non-TX destructive commands still surface the
-warning string.
+**Resolved posture — two independent gates, both required:**
 
-> This narrows the original "full power, warn-and-proceed" decision. **Confirm or
-> override before implementation.** If you prefer the unrestricted original, the
-> gate becomes a warning-only string and this paragraph is removed.
+1. **Operator env flag (`FLIPPER_ENABLE_TX_TOOLS`, default off).** A
+   transmit/destructive command is refused outright unless the operator has set
+   this flag on the server. This is the PROTO-006 control — it lives outside the
+   model's reach.
+2. **Per-call acceptance (`i_accept_responsibility=True`).** On top of the env
+   flag, the gated command must also pass explicit per-call intent. This is an
+   audit/intent signal, *not* the trust boundary.
 
-v3 graduates the gate into per-tool structured confirmations with region notices.
+A gated command runs only when **both** hold. Read/scan/RX and benign commands
+run freely. The risk classifier (`subghz tx*`, `rfid write`, `ikey write`,
+`ir tx*`, `factory reset`, `storage format`, `power off/reboot`,
+`update install`, …) decides *which* commands are gated; it is a defense-in-depth
+**advisory** signal, not the sole boundary — it is an ordered prefix list and
+therefore fails open on anything unlisted (e.g. a `loader open <app>` that
+transmits), which is exactly why the env flag, not the classifier, is the real
+control.
+
+v3 graduates the per-call gate into per-tool structured confirmations with
+region notices.
 
 ### Tooling consolidation (the "supersede" choice)
 
@@ -228,8 +250,11 @@ v3 graduates the gate into per-tool structured confirmations with region notices
 ### Testing
 
 - Unit tests mock the link: CLI drain loop, **`StopSession` round-trip and mode
-  switching in both directions**, exclusive-lock coverage across a round-trip,
-  resource registration, radio-TX/destructive gating, WiFi-CLI rejection.
+  switching in both directions**, **shared-lock coverage (an RPC ping blocks
+  while a CLI round-trip holds `_io_lock`)**, resource registration, **the
+  two-gate transmit/destructive path (env flag off → refused; env flag on but no
+  acceptance → refused; both → runs)**, WiFi-CLI rejection via the transport
+  capability property.
 - `integration` / `usb` / `wifi`-marked tests hit a real Flipper (existing
   convention). CI stays `uv run pytest -m "not integration"`.
 - Resource content-lint test: every documented command parses; no dead workflow
@@ -253,11 +278,15 @@ v3 graduates the gate into per-tool structured confirmations with region notices
 - **v2 / v3:** the same outcomes via typed tools with verification and gating;
   v3 additionally supports streaming capture and gated replay/TX.
 
-## Open questions (blocking)
+## Open questions
 
-1. **Radio-TX safety gate** — confirm the amended `i_accept_responsibility`
-   posture above, or revert to warning-only full power.
-2. **WiFi CLI** — accept USB-only CLI for v1 (recommended), or pull WiFi-bridge
-   CLI support forward (firmware work)?
-3. **Region default** for SubGHz legality notices (US vs EU) — needed by v3, not
+1. ~~**Radio-TX safety gate**~~ — **resolved:** operator env flag
+   (`FLIPPER_ENABLE_TX_TOOLS`) **plus** per-call `i_accept_responsibility` (see
+   Safety posture).
+2. ~~**Tool namespace**~~ — **resolved:** this repo officially adopts `flipper_*`
+   (documented PROTO-002 deviation); `systeminfo_get` is renamed
+   `flipper_system_info`.
+3. **WiFi CLI** (non-blocking) — accept USB-only CLI for v1 (recommended), or
+   pull WiFi-bridge CLI support forward (firmware work)?
+4. **Region default** for SubGHz legality notices (US vs EU) — needed by v3, not
    v1.
