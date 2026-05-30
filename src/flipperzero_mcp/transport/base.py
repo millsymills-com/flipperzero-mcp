@@ -6,20 +6,17 @@ from abc import ABC, abstractmethod
 
 
 class FlipperTransport(ABC):
-    """
-    Abstract base class for Flipper Zero transport implementations.
+    """Abstract base class for Flipper Zero transport implementations.
 
-    Provides a common interface for different connection methods:
-    - USB Serial
-    - WiFi (ESP32)
+    Provides a common interface for different connection methods (USB serial
+    and WiFi via ESP32).
     """
 
     def __init__(self, config: dict):
-        """
-        Initialize transport with configuration.
+        """Initialize the transport with its configuration.
 
         Args:
-            config: Transport-specific configuration
+            config: Transport-specific configuration.
         """
         self.config = config
         self.connected = False
@@ -62,15 +59,14 @@ class FlipperTransport(ABC):
         pass
 
     async def receive_exact(self, n: int, timeout: float | None = None) -> bytes:
-        """
-        Receive exactly N bytes, buffering any extra data for subsequent reads.
+        """Receive exactly N bytes, buffering any extra data for subsequent reads.
 
-        This is required for protocols that use explicit framing (e.g. 4-byte length
+        Required for protocols that use explicit framing (e.g. 4-byte length
         prefix + payload). Underlying transports may return arbitrary chunk sizes.
 
         Args:
-            n: Number of bytes to read
-            timeout: Optional overall timeout in seconds
+            n: Number of bytes to read.
+            timeout: Optional overall timeout in seconds.
 
         Returns:
             Exactly N bytes, or b"" if timeout/EOF occurs before N bytes are available.
@@ -119,10 +115,9 @@ class FlipperTransport(ABC):
         pass
 
     def get_name(self) -> str:
-        """
-        Get transport name for logging.
+        """Get the transport name for logging.
 
         Returns:
-            Transport name (e.g., "USB", "WiFi")
+            Transport name (e.g. "USB", "WiFi").
         """
         return self.__class__.__name__.replace("Transport", "")

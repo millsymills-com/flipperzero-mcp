@@ -20,16 +20,11 @@ logger = logging.getLogger(__name__)
 
 
 class AutoTransport(FlipperTransport):
-    """
-    Transport that selects between USB and WiFi at runtime.
+    """Transport that selects between USB and WiFi at runtime.
 
-    The constructor expects to receive the *full* transport section:
+    The constructor expects the *full* transport section::
 
-    {
-      "type": "auto",
-      "usb": {...},
-      "wifi": {...}
-    }
+        {"type": "auto", "usb": {...}, "wifi": {...}}
     """
 
     def __init__(self, config: dict):
