@@ -30,6 +30,18 @@ or WiFi.
   `uv run pytest -m "not integration"`.
 - **Firmware is not built in CI.** It is harvested as-is for WiFi users.
 
+## Canonical MCP standards
+
+Authoritative source: `~/Desktop/Projects/consistency-check/docs/standards/`. This
+repo is graded against `mcp.md` + `python.md` + `mcp-protocol.md`.
+
+Run the audit:
+
+```bash
+cd ~/Desktop/Projects/consistency-check
+uv run consistency-check audit --repo flipperzero-mcp
+```
+
 ## Agent skills
 
 ### Issue tracker
