@@ -105,6 +105,15 @@ class FlipperTransport(ABC):
         """Clear any buffered received bytes."""
         self._rx_buffer.clear()
 
+    @property
+    def supports_cli_text_mode(self) -> bool:
+        """Whether the transport can carry the Flipper CLI text shell.
+
+        Defaults to True (USB CDC carries both the text CLI and nanopb RPC).
+        Transports that speak protobuf only (the WiFi bridge) override to False.
+        """
+        return True
+
     @abstractmethod
     async def is_connected(self) -> bool:
         """Check whether the transport is connected.

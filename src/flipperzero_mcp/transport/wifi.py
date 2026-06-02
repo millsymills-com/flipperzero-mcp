@@ -31,6 +31,11 @@ class WiFiTransport(FlipperTransport):
         self.reader: asyncio.StreamReader | None = None
         self.writer: asyncio.StreamWriter | None = None
 
+    @property
+    def supports_cli_text_mode(self) -> bool:
+        """The WiFi bridge speaks nanopb RPC over TCP; it has no CLI text shell."""
+        return False
+
     async def connect(self) -> bool:
         """
         Connect to Flipper Zero via WiFi.
