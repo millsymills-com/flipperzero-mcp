@@ -6,6 +6,11 @@ Inherits the workspace conventions in `../CLAUDE.md` and the global standards in
 `~/.claude/CLAUDE.md`. Defer to those for code-quality limits, tooling, and
 workflow.
 
+Canonical MCP standards live in `~/Desktop/Projects/consistency-check/docs/standards/`
+(`mcp.md` + `python.md` + `mcp-protocol.md`); audit with
+`uv run consistency-check audit --repo flipperzero-mcp`. This path is
+workspace-internal — external clones won't have it.
+
 ## Project
 
 stdio MCP server (FastMCP) for the Flipper Zero, speaking protobuf RPC over USB
