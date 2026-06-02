@@ -61,12 +61,14 @@ class ProtobufRPC:
     the flipperzero-protobuf repository.
     """
 
-    def __init__(self, transport: FlipperTransport):
-        """
-        Initialize Protobuf RPC client.
+    def __init__(self, transport: FlipperTransport, *, io_lock: asyncio.Lock | None = None):
+        """Initialize Protobuf RPC client.
 
         Args:
-            transport: Transport layer for communication
+            transport: Transport layer for communication.
+            io_lock: Shared client-level I/O lock that serializes every CLI and
+                RPC round-trip on the link. When omitted a fresh per-instance
+                lock is created so direct callers still get safe serialization.
         """
         if not PROTOBUF_AVAILABLE:
             raise ImportError(
@@ -78,6 +80,7 @@ class ProtobufRPC:
         self.command_id = 0
         self._rpc_session_started = False
         self._last_negotiation_failure: float | None = None
+        self._io_lock = io_lock if io_lock is not None else asyncio.Lock()
 
     def _get_next_command_id(self) -> int:
         """Get next command ID for RPC calls."""
@@ -144,6 +147,35 @@ class ProtobufRPC:
         except Exception:
             logger.debug("_receive_main_message failed", exc_info=True)
             return None
+
+    async def _drain_host_rx(self, max_seconds: float = 0.6) -> None:
+        """Drain pending device->host bytes until idle for the given budget.
+
+        Unlocked helper: callers must already hold the shared I/O lock. Used to
+        clear CLI banner/prompt/echo so it is not misread as RPC framing.
+        """
+        try:
+            end = time.monotonic() + max_seconds
+            while time.monotonic() < end:
+                chunk = await self.transport.receive(timeout=0.05)
+                if not chunk:
+                    await asyncio.sleep(0.01)
+                    continue
+        except Exception:
+            logger.debug("_drain_host_rx failed", exc_info=True)
+
+    async def send_stop_session(self) -> None:
+        """Send a nanopb-delimited StopSession frame to leave RPC mode.
+
+        Unlocked helper: callers must already hold the shared I/O lock. Drives
+        the device from RPC back into CLI mode and drains residual output.
+        """
+        main_request = flipper_pb2.Main()
+        main_request.stop_session.CopyFrom(flipper_pb2.StopSession())
+        payload = main_request.SerializeToString()
+        await self.transport.send(self._encode_varint(len(payload)) + payload)
+        await self._drain_host_rx(max_seconds=0.4)
+        self._rpc_session_started = False
 
     async def _ensure_rpc_session_started(self) -> None:
         """
@@ -347,24 +379,25 @@ class ProtobufRPC:
 
         Returns the echoed bytes (if any) or None on failure.
         """
-        try:
-            main_request = flipper_pb2.Main()
-            main_request.command_id = self._get_next_command_id()
-            main_request.has_next = False
-            ping_req = system_pb2.PingRequest()
-            ping_req.data = data
-            main_request.system_ping_request.CopyFrom(ping_req)
+        async with self._io_lock:
+            try:
+                main_request = flipper_pb2.Main()
+                main_request.command_id = self._get_next_command_id()
+                main_request.has_next = False
+                ping_req = system_pb2.PingRequest()
+                ping_req.data = data
+                main_request.system_ping_request.CopyFrom(ping_req)
 
-            resp = await self._send_rpc_message(main_request)
-            if (
-                resp
-                and resp.command_status == flipper_pb2.CommandStatus.OK
-                and resp.HasField("system_ping_response")
-            ):
-                return resp.system_ping_response.data
-        except Exception:
-            logger.debug("ping failed", exc_info=True)
-        return None
+                resp = await self._send_rpc_message(main_request)
+                if (
+                    resp
+                    and resp.command_status == flipper_pb2.CommandStatus.OK
+                    and resp.HasField("system_ping_response")
+                ):
+                    return resp.system_ping_response.data
+            except Exception:
+                logger.debug("ping failed", exc_info=True)
+            return None
 
     async def app_start(self, name: str, args: str = "") -> bool:
         """
@@ -374,21 +407,22 @@ class ProtobufRPC:
         and disrupt the current transport (especially USB CDC). Callers should be prepared
         for the connection to drop even if the start succeeded.
         """
-        try:
-            main_request = flipper_pb2.Main()
-            main_request.command_id = self._get_next_command_id()
-            main_request.has_next = False
+        async with self._io_lock:
+            try:
+                main_request = flipper_pb2.Main()
+                main_request.command_id = self._get_next_command_id()
+                main_request.has_next = False
 
-            req = application_pb2.StartRequest()
-            req.name = name
-            req.args = args or ""
-            main_request.app_start_request.CopyFrom(req)
+                req = application_pb2.StartRequest()
+                req.name = name
+                req.args = args or ""
+                main_request.app_start_request.CopyFrom(req)
 
-            resp = await self._send_rpc_message(main_request)
-            return bool(resp and resp.command_status == flipper_pb2.CommandStatus.OK)
-        except Exception:
-            logger.debug("app_start failed", exc_info=True)
-            return False
+                resp = await self._send_rpc_message(main_request)
+                return bool(resp and resp.command_status == flipper_pb2.CommandStatus.OK)
+            except Exception:
+                logger.debug("app_start failed", exc_info=True)
+                return False
 
     async def get_device_info(self) -> dict[str, Any]:
         """
@@ -403,11 +437,12 @@ class ProtobufRPC:
         info = {}
 
         # Add overall timeout to prevent hanging
-        try:
-            return await asyncio.wait_for(self._get_device_info_internal(), timeout=6.0)
-        except (TimeoutError, Exception):
-            logger.debug("get_device_info timed out or failed", exc_info=True)
-            return info
+        async with self._io_lock:
+            try:
+                return await asyncio.wait_for(self._get_device_info_internal(), timeout=6.0)
+            except (TimeoutError, Exception):
+                logger.debug("get_device_info timed out or failed", exc_info=True)
+                return info
 
     async def _get_device_info_internal(self) -> dict[str, Any]:  # noqa: PLR0912
         """Internal implementation of get_device_info.
@@ -476,7 +511,7 @@ class ProtobufRPC:
 
             for key in property_keys:
                 try:
-                    value = await self.get_property(key)
+                    value = await self._get_property_internal(key)
                     if value:
                         info[key] = value
                 except Exception:
@@ -495,11 +530,12 @@ class ProtobufRPC:
             Property value or None
         """
         # Add overall timeout to prevent hanging
-        try:
-            return await asyncio.wait_for(self._get_property_internal(key), timeout=2.0)
-        except (TimeoutError, Exception):
-            logger.debug("get_property(%s) timed out or failed", key, exc_info=True)
-            return None
+        async with self._io_lock:
+            try:
+                return await asyncio.wait_for(self._get_property_internal(key), timeout=2.0)
+            except (TimeoutError, Exception):
+                logger.debug("get_property(%s) timed out or failed", key, exc_info=True)
+                return None
 
     async def _get_property_internal(self, key: str) -> str | None:
         """Internal implementation of get_property."""
@@ -539,16 +575,17 @@ class ProtobufRPC:
         we collect all frames.
         """
         names: list[str] = []
-        try:
-            return await asyncio.wait_for(
-                self._storage_list_internal(
-                    path, include_md5=include_md5, filter_max_size=filter_max_size
-                ),
-                timeout=3.0,
-            )
-        except Exception:
-            logger.debug("storage_list(%s) timed out or failed", path, exc_info=True)
-            return names
+        async with self._io_lock:
+            try:
+                return await asyncio.wait_for(
+                    self._storage_list_internal(
+                        path, include_md5=include_md5, filter_max_size=filter_max_size
+                    ),
+                    timeout=3.0,
+                )
+            except Exception:
+                logger.debug("storage_list(%s) timed out or failed", path, exc_info=True)
+                return names
 
     async def storage_list_detailed(
         self, path: str, include_md5: bool = False, filter_max_size: int = 0
@@ -563,16 +600,17 @@ class ProtobufRPC:
         - md5sum: optional md5 (only when include_md5=True and device provides it)
         """
         entries: list[dict[str, Any]] = []
-        try:
-            return await asyncio.wait_for(
-                self._storage_list_detailed_internal(
-                    path, include_md5=include_md5, filter_max_size=filter_max_size
-                ),
-                timeout=3.0,
-            )
-        except Exception:
-            logger.debug("storage_list_detailed(%s) timed out or failed", path, exc_info=True)
-            return entries
+        async with self._io_lock:
+            try:
+                return await asyncio.wait_for(
+                    self._storage_list_detailed_internal(
+                        path, include_md5=include_md5, filter_max_size=filter_max_size
+                    ),
+                    timeout=3.0,
+                )
+            except Exception:
+                logger.debug("storage_list_detailed(%s) timed out or failed", path, exc_info=True)
+                return entries
 
     async def _storage_list_internal(
         self, path: str, include_md5: bool = False, filter_max_size: int = 0
@@ -671,11 +709,12 @@ class ProtobufRPC:
         Note: Some firmwares may stream large files or require chunking; this is a best-effort
         read for small files where `ReadResponse.file.data` is populated.
         """
-        try:
-            return await asyncio.wait_for(self._storage_read_internal(path), timeout=3.0)
-        except Exception:
-            logger.debug("storage_read(%s) timed out or failed", path, exc_info=True)
-            return b""
+        async with self._io_lock:
+            try:
+                return await asyncio.wait_for(self._storage_read_internal(path), timeout=3.0)
+            except Exception:
+                logger.debug("storage_read(%s) timed out or failed", path, exc_info=True)
+                return b""
 
     async def _storage_read_internal(self, path: str) -> bytes:
         try:
@@ -704,10 +743,11 @@ class ProtobufRPC:
 
         Returns (total_space, free_space) or None on failure.
         """
-        try:
-            return await asyncio.wait_for(self._storage_info_internal(path), timeout=3.0)
-        except Exception:
-            return None
+        async with self._io_lock:
+            try:
+                return await asyncio.wait_for(self._storage_info_internal(path), timeout=3.0)
+            except Exception:
+                return None
 
     async def _storage_info_internal(self, path: str) -> tuple[int, int] | None:
         try:
@@ -732,11 +772,12 @@ class ProtobufRPC:
         return None
 
     async def storage_mkdir(self, path: str) -> bool:
-        try:
-            return await asyncio.wait_for(self._storage_mkdir_internal(path), timeout=3.0)
-        except Exception:
-            logger.debug("storage_mkdir(%s) timed out or failed", path, exc_info=True)
-            return False
+        async with self._io_lock:
+            try:
+                return await asyncio.wait_for(self._storage_mkdir_internal(path), timeout=3.0)
+            except Exception:
+                logger.debug("storage_mkdir(%s) timed out or failed", path, exc_info=True)
+                return False
 
     async def _storage_mkdir_internal(self, path: str) -> bool:
         try:
@@ -757,13 +798,14 @@ class ProtobufRPC:
             return False
 
     async def storage_delete(self, path: str, recursive: bool = False) -> bool:
-        try:
-            return await asyncio.wait_for(
-                self._storage_delete_internal(path, recursive=recursive), timeout=3.0
-            )
-        except Exception:
-            logger.debug("storage_delete(%s) timed out or failed", path, exc_info=True)
-            return False
+        async with self._io_lock:
+            try:
+                return await asyncio.wait_for(
+                    self._storage_delete_internal(path, recursive=recursive), timeout=3.0
+                )
+            except Exception:
+                logger.debug("storage_delete(%s) timed out or failed", path, exc_info=True)
+                return False
 
     async def _storage_delete_internal(self, path: str, recursive: bool = False) -> bool:
         try:
@@ -785,11 +827,14 @@ class ProtobufRPC:
             return False
 
     async def storage_write(self, path: str, content: bytes) -> bool:
-        try:
-            return await asyncio.wait_for(self._storage_write_internal(path, content), timeout=3.0)
-        except Exception:
-            logger.debug("storage_write(%s) timed out or failed", path, exc_info=True)
-            return False
+        async with self._io_lock:
+            try:
+                return await asyncio.wait_for(
+                    self._storage_write_internal(path, content), timeout=3.0
+                )
+            except Exception:
+                logger.debug("storage_write(%s) timed out or failed", path, exc_info=True)
+                return False
 
     async def _storage_write_internal(self, path: str, content: bytes) -> bool:
         try:

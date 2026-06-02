@@ -23,7 +23,7 @@ class FakeTransport:
 
 
 class FakeRPC:
-    def __init__(self, transport):
+    def __init__(self, transport, *, io_lock=None):
         pass
 
     async def ping(self, data=b"ping"):

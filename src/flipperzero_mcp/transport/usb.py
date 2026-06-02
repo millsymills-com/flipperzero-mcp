@@ -38,7 +38,6 @@ class USBTransport(FlipperTransport):
         self.baudrate = config.get("baudrate", 115200)
         self.timeout = config.get("timeout", 1.0)
         self.serial: serial.Serial | None = None
-        self._lock = asyncio.Lock()
 
     def _auto_detect_port(self) -> str:
         """
@@ -138,17 +137,17 @@ class USBTransport(FlipperTransport):
         if not self.serial or not self.serial.is_open:
             raise RuntimeError("USB not connected")
 
-        # Run serial write in executor to avoid blocking
+        # Run serial write in executor to avoid blocking. Frame-level
+        # serialization is provided by the client's shared I/O lock; this
+        # transport intentionally holds no lock of its own.
         loop = asyncio.get_event_loop()
-        async with self._lock:
-            await loop.run_in_executor(None, self.serial.write, data)
+        await loop.run_in_executor(None, self.serial.write, data)
 
     async def receive(self, timeout: float | None = None) -> bytes:
         if not self.serial or not self.serial.is_open:
             raise RuntimeError("USB not connected")
         loop = asyncio.get_event_loop()
-        async with self._lock:
-            return await loop.run_in_executor(None, self._blocking_read, timeout)
+        return await loop.run_in_executor(None, self._blocking_read, timeout)
 
     def _blocking_read(self, timeout: float | None) -> bytes:
         assert self.serial is not None

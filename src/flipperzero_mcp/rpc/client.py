@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+import enum
 import logging
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, TypedDict
@@ -12,6 +14,18 @@ if TYPE_CHECKING:
     from flipperzero_mcp.transport.base import FlipperTransport
 
 logger = logging.getLogger(__name__)
+
+
+class LinkMode(enum.Enum):
+    """Operating mode of the link to the Flipper.
+
+    A single physical link (USB CDC or WiFi TCP) multiplexes a text CLI and the
+    nanopb-delimited RPC protocol. The mode tracks which one the device is in.
+    """
+
+    UNKNOWN = "unknown"
+    CLI = "cli"
+    RPC = "rpc"
 
 
 class TransportInfo(TypedDict):
@@ -59,6 +73,10 @@ class FlipperClient:
         self.rpc: ProtobufRPC | None = None
         self.last_connection_error: str | None = None
         self._sd_card_available: bool | None = None
+        # Single client-level lock shared with ProtobufRPC. Every CLI and RPC
+        # round-trip acquires it so frames never interleave on the one link.
+        self._io_lock = asyncio.Lock()
+        self._mode = LinkMode.UNKNOWN
 
     async def connect(self) -> bool:
         try:
@@ -68,10 +86,11 @@ class FlipperClient:
             return False
         if not ok:
             return False
-        self.rpc = ProtobufRPC(self.transport)
+        self.rpc = ProtobufRPC(self.transport, io_lock=self._io_lock)
         self.connected = True
         self.last_connection_error = None
         self._sd_card_available = None
+        self._mode = LinkMode.UNKNOWN
         return True
 
     async def disconnect(self) -> None:
@@ -82,6 +101,44 @@ class FlipperClient:
         self.connected = False
         self.rpc = None
         self._sd_card_available = None
+        self._mode = LinkMode.UNKNOWN
+
+    def mode(self) -> LinkMode:
+        """Return the current link mode (UNKNOWN until the first enter_*)."""
+        return self._mode
+
+    async def enter_rpc(self) -> LinkMode:
+        """Drive the link into nanopb RPC mode and record it.
+
+        Holds the shared I/O lock for the whole negotiation so no CLI or RPC
+        traffic interleaves with the mode switch.
+
+        Returns:
+            The resulting link mode (RPC on success, UNKNOWN if no RPC layer).
+        """
+        if self.rpc is None:
+            return self._mode
+        async with self._io_lock:
+            await self.rpc._ensure_rpc_session_started()
+            self._mode = LinkMode.RPC
+        return self._mode
+
+    async def enter_cli(self) -> LinkMode:
+        """Drive the link into text CLI mode and record it.
+
+        Sends a StopSession frame to leave RPC mode, drains residual output to
+        the CLI prompt, and resets the RPC session flag. Holds the shared I/O
+        lock for the whole switch so no traffic interleaves.
+
+        Returns:
+            The resulting link mode (CLI on success, UNKNOWN if no RPC layer).
+        """
+        if self.rpc is None:
+            return self._mode
+        async with self._io_lock:
+            await self.rpc.send_stop_session()
+            self._mode = LinkMode.CLI
+        return self._mode
 
     async def get_connection_health(self, probe_rpc: bool = True) -> ConnectionHealth:
         ts = datetime.now(UTC).isoformat()
