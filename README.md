@@ -4,6 +4,17 @@ An MCP server for the Flipper Zero. It speaks protobuf RPC to a Flipper over USB
 or over WiFi (via an ESP32 WiFi Dev Board) and exposes connection and system
 tools to MCP clients such as Claude Desktop.
 
+## Status
+
+Stage: S1 (walking skeleton) — the server runs over stdio and exposes
+read-only tools (`flipper_connection_health`, `flipper_connection_reconnect`,
+`flipper_system_info`) backed by unit tests. Write tools (`flipper_cli_exec`,
+the `flipper_fs_*` storage slice) are the S2/S3 launch work tracked in #37.
+
+This repo officially adopts the `flipper_` tool namespace — a documented
+deviation from the literal PROTO-002 rule (which would be `flipperzero_`),
+chosen for ergonomics and applied uniformly across the surface.
+
 ## Features
 
 - stdio MCP server (FastMCP).
@@ -11,7 +22,7 @@ tools to MCP clients such as Claude Desktop.
   - **USB** — serial CDC, with CLI → RPC session switching.
   - **WiFi** — TCP to an ESP32 dev board running the TCP↔UART bridge firmware.
 - `auto` transport selection: USB first, WiFi fallback only when a WiFi host is set.
-- Tools: `flipper_connection_health`, `flipper_connection_reconnect`, `systeminfo_get`.
+- Tools: `flipper_connection_health`, `flipper_connection_reconnect`, `flipper_system_info`.
 
 ## Install
 
@@ -60,7 +71,7 @@ falls back to WiFi when `FLIPPER_WIFI_HOST` is set.
 |---|---|
 | `flipper_connection_health` | Report connection health (connected, transport, RPC responsiveness, last error). Optionally pings RPC. |
 | `flipper_connection_reconnect` | Disconnect and reconnect, then report updated health. |
-| `systeminfo_get` | Return device info (name, hardware, firmware), transport, and SD-card availability. |
+| `flipper_system_info` | Return device info (name, hardware, firmware), transport, and SD-card availability. |
 
 ## Firmware
 
@@ -68,6 +79,19 @@ WiFi transport requires an ESP32 WiFi Dev Board running the TCP↔UART bridge
 firmware shipped in `firmware/tcp_uart_bridge/`. See that directory's `README.md`
 for ESP-IDF build/flash instructions and `docs/wifi_dev_board.md` for the
 end-to-end setup guide. The firmware is harvested as-is and is not built in CI.
+
+## Development
+
+```bash
+uv sync --extra dev          # install with dev dependencies
+uv run pytest -m "not integration"   # default unit/property suite
+uv run ruff check src tests  # lint
+uv run ruff format src tests # format
+uv run ty check src/flipperzero_mcp/ # type-check
+```
+
+Integration tests (marked `integration`, plus `usb`/`wifi`) require a real
+Flipper and are local-only. See `CLAUDE.md` for project conventions.
 
 ## Attribution
 

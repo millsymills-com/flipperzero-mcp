@@ -14,12 +14,18 @@ def register_systeminfo_tools(mcp: FastMCP) -> None:
     """Register the systeminfo tool."""
 
     @mcp.tool(tags={"flipper", "systeminfo"})
-    async def systeminfo_get(ctx: Context) -> dict[str, Any]:
+    async def flipper_system_info(ctx: Context) -> dict[str, Any]:
         """Get system information about the connected Flipper Zero.
+
+        Args:
+            ctx: FastMCP request context (injected).
 
         Returns:
             Dict with connection status, transport, device info (name/hardware/firmware),
             and SD-card availability.
+
+        Raises:
+            ToolError: If the Flipper is unreachable or the RPC call fails.
         """
         try:
             client = await ensure_connected(ctx)

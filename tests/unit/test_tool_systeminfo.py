@@ -39,7 +39,7 @@ async def test_systeminfo_returns_structured(monkeypatch):
     monkeypatch.setattr("flipperzero_mcp.rpc.client.ProtobufRPC", FakeRPC)
     server = create_server(FlipperConfig(_env_file=None))
     async with Client(server) as client:
-        result = await client.call_tool("systeminfo_get", {})
+        result = await client.call_tool("flipper_system_info", {})
         data = result.data
         assert data["connected"] is True
         assert data["device"]["firmware"] == "1.2.3"
@@ -66,4 +66,4 @@ async def test_systeminfo_surfaces_error_when_unreachable(monkeypatch):
     server = create_server(FlipperConfig(_env_file=None))
     async with Client(server) as client:
         with pytest.raises(ToolError, match="not connected"):
-            await client.call_tool("systeminfo_get", {})
+            await client.call_tool("flipper_system_info", {})

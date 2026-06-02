@@ -6,6 +6,10 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+- Renamed the `systeminfo_get` tool to `flipper_system_info` for namespace
+  consistency (all tools use the `flipper_` prefix).
+
 ## [0.1.0]
 
 ### Added
