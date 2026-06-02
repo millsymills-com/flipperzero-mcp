@@ -7,6 +7,10 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Added
+- Native storage RPC tools: `flipper_fs_list`, `flipper_fs_mkdir`,
+  `flipper_fs_push`, and `flipper_fs_pull`. Push and pull verify integrity by
+  comparing the local MD5 to the device's `storage_md5sum` and fail loud on
+  mismatch. Adds a `storage_md5sum` method to the protobuf RPC layer.
 - Dual-mode link manager on `FlipperClient`: `enter_cli()`, `enter_rpc()`, and
   `mode()` (a `LinkMode` enum) track and switch the shared link between the text
   CLI and nanopb RPC. A single client-level `_io_lock` now serializes every CLI

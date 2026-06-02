@@ -11,6 +11,7 @@ if TYPE_CHECKING:
     from fastmcp import Context
 
     from flipperzero_mcp.rpc.client import FlipperClient
+    from flipperzero_mcp.rpc.protobuf_rpc import ProtobufRPC
     from flipperzero_mcp.server import ServerContext
 
 logger = logging.getLogger(__name__)
@@ -45,3 +46,16 @@ async def ensure_connected(ctx: Context) -> FlipperClient:
     if await client.connect():
         return client
     raise FlipperNotConnectedError(client.last_connection_error or "device unavailable")
+
+
+async def get_rpc(ctx: Context) -> ProtobufRPC:
+    """Return the live ProtobufRPC after guaranteeing a connection.
+
+    Raises:
+        FlipperNotConnectedError: If the device is down and a reconnect fails,
+            or the RPC layer is somehow absent after a successful connect.
+    """
+    client = await ensure_connected(ctx)
+    if client.rpc is None:
+        raise FlipperNotConnectedError(client.last_connection_error or "RPC layer unavailable")
+    return client.rpc

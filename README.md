@@ -61,6 +61,10 @@ falls back to WiFi when `FLIPPER_WIFI_HOST` is set.
 | `flipper_connection_health` | Report connection health (connected, transport, RPC responsiveness, last error). Optionally pings RPC. |
 | `flipper_connection_reconnect` | Disconnect and reconnect, then report updated health. |
 | `systeminfo_get` | Return device info (name, hardware, firmware), transport, and SD-card availability. |
+| `flipper_fs_list` | List a device directory; returns typed entries (name, type, size, optional md5). |
+| `flipper_fs_mkdir` | Create a directory on the device storage. |
+| `flipper_fs_push` | Upload a local file to the device and verify integrity against the device MD5. |
+| `flipper_fs_pull` | Download a device file to the host and verify integrity against the device MD5. |
 
 ## Firmware
 

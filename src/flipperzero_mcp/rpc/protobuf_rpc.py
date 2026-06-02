@@ -826,6 +826,43 @@ class ProtobufRPC:
             logger.debug("_storage_delete_internal failed", exc_info=True)
             return False
 
+    async def storage_md5sum(self, path: str) -> str | None:
+        """Compute the device-side MD5 of a file via storage_md5sum_request.
+
+        Args:
+            path: Absolute path on the device (e.g. ``/ext/foo.bin``).
+
+        Returns:
+            The lowercase hex MD5 digest, or None on failure or empty digest.
+        """
+        async with self._io_lock:
+            try:
+                return await asyncio.wait_for(self._storage_md5sum_internal(path), timeout=10.0)
+            except Exception:
+                logger.debug("storage_md5sum(%s) timed out or failed", path, exc_info=True)
+                return None
+
+    async def _storage_md5sum_internal(self, path: str) -> str | None:
+        try:
+            main_request = flipper_pb2.Main()
+            main_request.command_id = self._get_next_command_id()
+            main_request.has_next = False
+
+            req = storage_pb2.Md5sumRequest()
+            req.path = path
+            main_request.storage_md5sum_request.CopyFrom(req)
+
+            main_response = await self._send_rpc_message(main_request)
+            if (
+                main_response
+                and main_response.command_status == flipper_pb2.CommandStatus.OK
+                and main_response.HasField("storage_md5sum_response")
+            ):
+                return main_response.storage_md5sum_response.md5sum or None
+        except Exception:
+            logger.debug("_storage_md5sum_internal failed", exc_info=True)
+        return None
+
     async def storage_write(self, path: str, content: bytes) -> bool:
         async with self._io_lock:
             try:
