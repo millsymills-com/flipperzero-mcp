@@ -9,8 +9,9 @@ tools to MCP clients such as Claude Desktop.
 ## Status
 
 **Stage: S2** (wrapped). The server runs over stdio with read tools (connection
-health, reconnect, system info, `fs_list`) and write tools (`fs_mkdir`,
-`fs_push`, `cli_exec`). Device-mutating storage writes are gated behind
+health, reconnect, system info, storage read tools (`fs_info`, `fs_stat`,
+`fs_timestamp`, `fs_list`, `fs_pull`) and write tools (`fs_mkdir`, `fs_delete`,
+`fs_rename`, `fs_push`, `cli_exec`). Device-mutating storage writes are gated behind
 `FLIPPER_ENABLE_WRITE_TOOLS` and transmit/destructive CLI commands behind
 `FLIPPER_ENABLE_TX_TOOLS`, both default-off. CI runs lint and tests on the
 committed lockfile. The `/flipper-install` flagship and live integration suite
@@ -23,7 +24,7 @@ are the S3 climb tracked in the public-launch issues (#37 umbrella).
   - **USB**: serial CDC, with CLI to RPC session switching.
   - **WiFi**: TCP to an ESP32 dev board running the TCP-to-UART bridge firmware.
 - `auto` transport selection: USB first, WiFi fallback only when a WiFi host is set.
-- Tools: connection health/reconnect, system info, storage list/push/pull/mkdir, and USB CLI exec.
+- Tools: connection health/reconnect, system info, storage info/stat/timestamp/list/push/pull/mkdir/delete/rename, and USB CLI exec.
 
 ## Install
 
@@ -76,8 +77,13 @@ falls back to WiFi when `FLIPPER_WIFI_HOST` is set.
 | `flipperzero_connection_health` | Report connection health (connected, transport, RPC responsiveness, last error). Optionally pings RPC. |
 | `flipperzero_connection_reconnect` | Disconnect and reconnect, then report updated health. |
 | `flipperzero_system_info` | Return device info (name, hardware, firmware), transport, and SD-card availability. |
+| `flipperzero_fs_info` | Return storage capacity information for a path such as `/ext`. |
+| `flipperzero_fs_stat` | Return metadata for a device file or directory. |
+| `flipperzero_fs_timestamp` | Return the device timestamp for a file or directory. |
 | `flipperzero_fs_list` | List a device directory; returns typed entries (name, type, size, optional md5). |
 | `flipperzero_fs_mkdir` | Create a directory on the device storage. |
+| `flipperzero_fs_delete` | Delete a file or directory on the device storage. |
+| `flipperzero_fs_rename` | Rename or move a device file/directory. |
 | `flipperzero_fs_push` | Upload a local file to the device and verify integrity against the device MD5. |
 | `flipperzero_fs_pull` | Download a device file to the host and verify integrity against the device MD5. |
 | `flipperzero_cli_exec` | Run one Flipper CLI command and return its output, completion flag, and risk classification. |
@@ -93,6 +99,7 @@ Bundled MCP resources:
 - `flipper://reference/cli`
 - `flipper://reference/connection`
 - `flipper://reference/filesystem`
+- `flipper://reference/system`
 - `flipper://workflow/install-app`
 - `flipper://workflow/transfer-files`
 - `flipper://workflow/flash-esp32`

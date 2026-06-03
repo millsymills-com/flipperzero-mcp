@@ -46,6 +46,15 @@ def _make_rpc(*, store=None, md5_override=None, corrupt_read=False):
         async def storage_info(self, _path):
             return (1000, 500)
 
+        async def storage_stat(self, path):
+            data = self.store.get(path, b"")
+            if data is None:
+                return {"name": path.rsplit("/", 1)[-1], "type": "DIR", "size": 0}
+            return {"name": path.rsplit("/", 1)[-1], "type": "FILE", "size": len(data)}
+
+        async def storage_timestamp(self, _path):
+            return 1_700_000_000
+
         async def storage_write(self, path, content):
             self.store[path] = bytes(content)
             return True
@@ -56,6 +65,19 @@ def _make_rpc(*, store=None, md5_override=None, corrupt_read=False):
 
         async def storage_mkdir(self, path):
             self.store[path] = None
+            return True
+
+        async def storage_delete(self, path, recursive=False):
+            _ = recursive
+            if path not in self.store:
+                return False
+            del self.store[path]
+            return True
+
+        async def storage_rename(self, old_path, new_path):
+            if old_path not in self.store:
+                return False
+            self.store[new_path] = self.store.pop(old_path)
             return True
 
         async def storage_list_detailed(self, _path, **_kwargs):
@@ -79,6 +101,28 @@ async def _server(monkeypatch, rpc_cls, **config_kwargs):
     monkeypatch.setattr("flipperzero_mcp.server.get_transport", lambda _t, _c: FakeTransport())
     monkeypatch.setattr("flipperzero_mcp.rpc.client.ProtobufRPC", rpc_cls)
     return create_server(FlipperConfig(_env_file=None, **config_kwargs))
+
+
+async def test_fs_info_returns_capacity(monkeypatch):
+    server = await _server(monkeypatch, _make_rpc())
+    async with Client(server) as client:
+        result = await client.call_tool("flipperzero_fs_info", {"path": "/ext"})
+        assert result.data == {"path": "/ext", "total_space": 1000, "free_space": 500}
+
+
+async def test_fs_stat_returns_entry_metadata(monkeypatch):
+    store = {"/ext/a.txt": b"abc"}
+    server = await _server(monkeypatch, _make_rpc(store=store))
+    async with Client(server) as client:
+        result = await client.call_tool("flipperzero_fs_stat", {"path": "/ext/a.txt"})
+        assert result.data["entry"] == {"name": "a.txt", "type": "FILE", "size": 3}
+
+
+async def test_fs_timestamp_returns_device_timestamp(monkeypatch):
+    server = await _server(monkeypatch, _make_rpc())
+    async with Client(server) as client:
+        result = await client.call_tool("flipperzero_fs_timestamp", {"path": "/ext/a.txt"})
+        assert result.data == {"path": "/ext/a.txt", "timestamp": 1_700_000_000}
 
 
 async def test_fs_list_returns_entries(monkeypatch):
@@ -105,6 +149,49 @@ async def test_fs_mkdir_blocked_without_write_flag(monkeypatch):
     async with Client(server) as client:
         with pytest.raises(ToolError, match=r"(?i)write tools are disabled"):
             await client.call_tool("flipperzero_fs_mkdir", {"path": "/ext/newdir"})
+
+
+async def test_fs_delete_removes_path(monkeypatch):
+    store = {"/ext/old.txt": b"bye"}
+    server = await _server(monkeypatch, _make_rpc(store=store), enable_write_tools=True)
+    async with Client(server) as client:
+        result = await client.call_tool(
+            "flipperzero_fs_delete", {"path": "/ext/old.txt", "recursive": False}
+        )
+        assert result.data["deleted"] is True
+        assert "/ext/old.txt" not in store
+
+
+async def test_fs_delete_blocked_without_write_flag(monkeypatch):
+    store = {"/ext/old.txt": b"bye"}
+    server = await _server(monkeypatch, _make_rpc(store=store))
+    async with Client(server) as client:
+        with pytest.raises(ToolError, match=r"(?i)write tools are disabled"):
+            await client.call_tool("flipperzero_fs_delete", {"path": "/ext/old.txt"})
+
+
+async def test_fs_rename_moves_path(monkeypatch):
+    store = {"/ext/old.txt": b"moved"}
+    server = await _server(monkeypatch, _make_rpc(store=store), enable_write_tools=True)
+    async with Client(server) as client:
+        result = await client.call_tool(
+            "flipperzero_fs_rename",
+            {"old_path": "/ext/old.txt", "new_path": "/ext/new.txt"},
+        )
+        assert result.data["renamed"] is True
+        assert store["/ext/new.txt"] == b"moved"
+        assert "/ext/old.txt" not in store
+
+
+async def test_fs_rename_blocked_without_write_flag(monkeypatch):
+    store = {"/ext/old.txt": b"moved"}
+    server = await _server(monkeypatch, _make_rpc(store=store))
+    async with Client(server) as client:
+        with pytest.raises(ToolError, match=r"(?i)write tools are disabled"):
+            await client.call_tool(
+                "flipperzero_fs_rename",
+                {"old_path": "/ext/old.txt", "new_path": "/ext/new.txt"},
+            )
 
 
 async def test_fs_push_verifies_md5(monkeypatch, tmp_path):
