@@ -10,6 +10,7 @@ if TYPE_CHECKING:
 
 def register_all_tools(mcp: FastMCP) -> None:
     """Register every Flipper tool on the server."""
+    from flipperzero_mcp.tools.apps import register_app_tools
     from flipperzero_mcp.tools.cli import register_cli_tools
     from flipperzero_mcp.tools.connection import register_connection_tools
     from flipperzero_mcp.tools.storage import register_storage_tools
@@ -19,3 +20,4 @@ def register_all_tools(mcp: FastMCP) -> None:
     register_systeminfo_tools(mcp)
     register_storage_tools(mcp)
     register_cli_tools(mcp)
+    register_app_tools(mcp)

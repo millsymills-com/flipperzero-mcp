@@ -402,6 +402,115 @@ class ProtobufRPC:
                 logger.debug("ping failed", exc_info=True)
             return None
 
+    async def system_protobuf_version(self) -> dict[str, int] | None:
+        """Return the firmware protobuf RPC version."""
+        async with self._io_lock:
+            try:
+                return await asyncio.wait_for(self._system_protobuf_version_internal(), timeout=3.0)
+            except Exception:
+                logger.debug("system_protobuf_version timed out or failed", exc_info=True)
+                return None
+
+    async def _system_protobuf_version_internal(self) -> dict[str, int] | None:
+        try:
+            main_request = flipper_pb2.Main()
+            main_request.command_id = self._get_next_command_id()
+            main_request.has_next = False
+            main_request.system_protobuf_version_request.CopyFrom(
+                system_pb2.ProtobufVersionRequest()
+            )
+
+            resp = await self._send_rpc_message(main_request)
+            if (
+                resp
+                and resp.command_status == flipper_pb2.CommandStatus.OK
+                and resp.HasField("system_protobuf_version_response")
+            ):
+                version = resp.system_protobuf_version_response
+                return {"major": int(version.major), "minor": int(version.minor)}
+        except Exception:
+            logger.debug("_system_protobuf_version_internal failed", exc_info=True)
+        return None
+
+    async def system_datetime(self) -> dict[str, int] | None:
+        """Return the device date/time fields reported by firmware."""
+        async with self._io_lock:
+            try:
+                return await asyncio.wait_for(self._system_datetime_internal(), timeout=3.0)
+            except Exception:
+                logger.debug("system_datetime timed out or failed", exc_info=True)
+                return None
+
+    async def _system_datetime_internal(self) -> dict[str, int] | None:
+        try:
+            main_request = flipper_pb2.Main()
+            main_request.command_id = self._get_next_command_id()
+            main_request.has_next = False
+            main_request.system_get_datetime_request.CopyFrom(system_pb2.GetDateTimeRequest())
+
+            resp = await self._send_rpc_message(main_request)
+            if (
+                resp
+                and resp.command_status == flipper_pb2.CommandStatus.OK
+                and resp.HasField("system_get_datetime_response")
+            ):
+                dt = resp.system_get_datetime_response.datetime
+                return {
+                    "year": int(dt.year),
+                    "month": int(dt.month),
+                    "day": int(dt.day),
+                    "hour": int(dt.hour),
+                    "minute": int(dt.minute),
+                    "second": int(dt.second),
+                    "weekday": int(dt.weekday),
+                }
+        except Exception:
+            logger.debug("_system_datetime_internal failed", exc_info=True)
+        return None
+
+    async def system_power_info(self) -> dict[str, str]:
+        """Return power/battery info key-value pairs from system_power_info_request."""
+        async with self._io_lock:
+            try:
+                return await asyncio.wait_for(self._system_power_info_internal(), timeout=6.0)
+            except Exception:
+                logger.debug("system_power_info timed out or failed", exc_info=True)
+                return {}
+
+    async def _system_power_info_internal(self) -> dict[str, str]:
+        info: dict[str, str] = {}
+        try:
+            main_request = flipper_pb2.Main()
+            main_request.command_id = self._get_next_command_id()
+            main_request.has_next = False
+            main_request.system_power_info_request.CopyFrom(system_pb2.PowerInfoRequest())
+
+            main_response = await self._send_rpc_message(main_request)
+            if not main_response or main_response.command_status != flipper_pb2.CommandStatus.OK:
+                return info
+
+            def collect(resp: Any) -> None:
+                if resp.HasField("system_power_info_response"):
+                    power = resp.system_power_info_response
+                    if power.key and power.value:
+                        info[power.key] = power.value
+
+            collect(main_response)
+            max_iterations = 100
+            iteration = 0
+            while main_response.has_next and iteration < max_iterations:
+                iteration += 1
+                next_response = await self._receive_main_message(timeout=2.5)
+                if not next_response:
+                    break
+                main_response = next_response
+                if main_response.command_status != flipper_pb2.CommandStatus.OK:
+                    break
+                collect(main_response)
+        except Exception:
+            logger.debug("_system_power_info_internal failed", exc_info=True)
+        return info
+
     async def app_start(self, name: str, args: str = "") -> bool:
         """
         Start an application via protobuf RPC (PB_App.StartRequest).

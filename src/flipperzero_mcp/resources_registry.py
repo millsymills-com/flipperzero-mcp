@@ -14,6 +14,7 @@ _RESOURCES: dict[str, str] = {
     "flipper://reference/cli": "reference_cli.md",
     "flipper://reference/connection": "reference_connection.md",
     "flipper://reference/filesystem": "reference_filesystem.md",
+    "flipper://reference/system": "reference_system.md",
     "flipper://workflow/install-app": "workflow_install_app.md",
     "flipper://workflow/transfer-files": "workflow_transfer_files.md",
     "flipper://workflow/flash-esp32": "workflow_flash_esp32.md",
