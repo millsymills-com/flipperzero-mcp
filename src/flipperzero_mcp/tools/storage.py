@@ -1,7 +1,7 @@
 """Native storage RPC tools for the Flipper Zero.
 
-Provides `flipperzero_fs_list`, `flipperzero_fs_mkdir`, `flipperzero_fs_push`, and
-`flipperzero_fs_pull`. Push/pull verify integrity by comparing the local MD5 to the
+Provides storage info/stat/list, mkdir/delete/rename, and push/pull tools.
+Push/pull verify integrity by comparing the local MD5 to the
 device's `storage_md5sum`, failing loud on mismatch.
 """
 
@@ -44,6 +44,82 @@ def _verify_md5(local_md5: str, device_md5: str | None, path: str) -> None:
 
 def register_storage_tools(mcp: FastMCP) -> None:
     """Register the native storage RPC tools."""
+
+    @mcp.tool(
+        tags={"flipper", "storage"},
+        annotations=ToolAnnotations(readOnlyHint=True, idempotentHint=True, openWorldHint=True),
+    )
+    async def flipperzero_fs_info(ctx: Context, path: str = "/ext") -> dict[str, Any]:
+        """Return storage capacity information for a device path.
+
+        Args:
+            path: Absolute device storage path, usually ``/ext`` for the SD card.
+
+        Returns:
+            Dict with ``path``, ``total_space``, and ``free_space`` byte counts.
+
+        Raises:
+            ToolError: If the device is unreachable or no storage info is returned.
+        """
+        try:
+            rpc = await get_rpc(ctx)
+            info = await rpc.storage_info(path)
+        except Exception as e:
+            _classify_client_error(e)
+        if info is None:
+            raise ToolError(f"storage info unavailable for {path}")
+        total_space, free_space = info
+        return {"path": path, "total_space": total_space, "free_space": free_space}
+
+    @mcp.tool(
+        tags={"flipper", "storage"},
+        annotations=ToolAnnotations(readOnlyHint=True, idempotentHint=True, openWorldHint=True),
+    )
+    async def flipperzero_fs_stat(ctx: Context, path: str) -> dict[str, Any]:
+        """Return metadata for a file or directory on the Flipper.
+
+        Args:
+            path: Absolute device path to inspect.
+
+        Returns:
+            Dict with ``path`` and ``entry`` metadata (name, type, size, optional md5sum).
+
+        Raises:
+            ToolError: If the device is unreachable or the path cannot be statted.
+        """
+        try:
+            rpc = await get_rpc(ctx)
+            entry = await rpc.storage_stat(path)
+        except Exception as e:
+            _classify_client_error(e)
+        if entry is None:
+            raise ToolError(f"stat unavailable for {path}")
+        return {"path": path, "entry": entry}
+
+    @mcp.tool(
+        tags={"flipper", "storage"},
+        annotations=ToolAnnotations(readOnlyHint=True, idempotentHint=True, openWorldHint=True),
+    )
+    async def flipperzero_fs_timestamp(ctx: Context, path: str) -> dict[str, Any]:
+        """Return the device timestamp for a file or directory.
+
+        Args:
+            path: Absolute device path to inspect.
+
+        Returns:
+            Dict with ``path`` and integer ``timestamp`` as reported by firmware.
+
+        Raises:
+            ToolError: If the device is unreachable or no timestamp is returned.
+        """
+        try:
+            rpc = await get_rpc(ctx)
+            timestamp = await rpc.storage_timestamp(path)
+        except Exception as e:
+            _classify_client_error(e)
+        if timestamp is None:
+            raise ToolError(f"timestamp unavailable for {path}")
+        return {"path": path, "timestamp": timestamp}
 
     @mcp.tool(
         tags={"flipper", "storage"},
@@ -97,6 +173,68 @@ def register_storage_tools(mcp: FastMCP) -> None:
         if not created:
             raise ToolError(f"failed to create directory {path} on the device")
         return {"path": path, "created": True}
+
+    @mcp.tool(
+        tags={"flipper", "storage"},
+        annotations=ToolAnnotations(
+            readOnlyHint=False, destructiveHint=True, idempotentHint=False, openWorldHint=True
+        ),
+    )
+    async def flipperzero_fs_delete(
+        ctx: Context, path: str, recursive: bool = False
+    ) -> dict[str, Any]:
+        """Delete a file or directory on the Flipper's storage.
+
+        Args:
+            path: Absolute device path to delete.
+            recursive: If true, allow recursive directory deletion.
+
+        Returns:
+            Dict with ``path``, ``recursive``, and ``deleted`` (True on success).
+
+        Raises:
+            ToolError: If write tools are disabled, the device is unreachable, or
+                the delete fails.
+        """
+        require_write_tools(ctx)
+        try:
+            rpc = await get_rpc(ctx)
+            deleted = await rpc.storage_delete(path, recursive=recursive)
+        except Exception as e:
+            _classify_client_error(e)
+        if not deleted:
+            raise ToolError(f"failed to delete {path} on the device")
+        return {"path": path, "recursive": recursive, "deleted": True}
+
+    @mcp.tool(
+        tags={"flipper", "storage"},
+        annotations=ToolAnnotations(
+            readOnlyHint=False, destructiveHint=True, idempotentHint=False, openWorldHint=True
+        ),
+    )
+    async def flipperzero_fs_rename(ctx: Context, old_path: str, new_path: str) -> dict[str, Any]:
+        """Rename or move a file/directory on the Flipper's storage.
+
+        Args:
+            old_path: Existing absolute device path.
+            new_path: New absolute device path.
+
+        Returns:
+            Dict with ``old_path``, ``new_path``, and ``renamed`` (True on success).
+
+        Raises:
+            ToolError: If write tools are disabled, the device is unreachable, or
+                the rename fails.
+        """
+        require_write_tools(ctx)
+        try:
+            rpc = await get_rpc(ctx)
+            renamed = await rpc.storage_rename(old_path, new_path)
+        except Exception as e:
+            _classify_client_error(e)
+        if not renamed:
+            raise ToolError(f"failed to rename {old_path} to {new_path} on the device")
+        return {"old_path": old_path, "new_path": new_path, "renamed": True}
 
     @mcp.tool(
         tags={"flipper", "storage"},

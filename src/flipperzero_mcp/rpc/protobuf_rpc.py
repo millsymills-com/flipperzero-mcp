@@ -752,6 +752,24 @@ class ProtobufRPC:
             except Exception:
                 return None
 
+    async def storage_stat(self, path: str) -> dict[str, Any] | None:
+        """Return file metadata for a device path via storage_stat_request."""
+        async with self._io_lock:
+            try:
+                return await asyncio.wait_for(self._storage_stat_internal(path), timeout=3.0)
+            except Exception:
+                logger.debug("storage_stat(%s) timed out or failed", path, exc_info=True)
+                return None
+
+    async def storage_timestamp(self, path: str) -> int | None:
+        """Return a device file timestamp via storage_timestamp_request."""
+        async with self._io_lock:
+            try:
+                return await asyncio.wait_for(self._storage_timestamp_internal(path), timeout=3.0)
+            except Exception:
+                logger.debug("storage_timestamp(%s) timed out or failed", path, exc_info=True)
+                return None
+
     async def _storage_info_internal(self, path: str) -> tuple[int, int] | None:
         try:
             main_request = flipper_pb2.Main()
@@ -772,6 +790,53 @@ class ProtobufRPC:
                 return int(r.total_space), int(r.free_space)
         except Exception:
             logger.debug("_storage_info_internal failed", exc_info=True)
+        return None
+
+    async def _storage_stat_internal(self, path: str) -> dict[str, Any] | None:
+        try:
+            main_request = flipper_pb2.Main()
+            main_request.command_id = self._get_next_command_id()
+            main_request.has_next = False
+
+            req = storage_pb2.StatRequest()
+            req.path = path
+            main_request.storage_stat_request.CopyFrom(req)
+
+            main_response = await self._send_rpc_message(main_request)
+            if (
+                main_response
+                and main_response.command_status == flipper_pb2.CommandStatus.OK
+                and main_response.HasField("storage_stat_response")
+            ):
+                f = main_response.storage_stat_response.file
+                ftype = "DIR" if f.type == storage_pb2.File.DIR else "FILE"
+                result: dict[str, Any] = {"name": f.name, "type": ftype, "size": int(f.size)}
+                if getattr(f, "md5sum", ""):
+                    result["md5sum"] = f.md5sum
+                return result
+        except Exception:
+            logger.debug("_storage_stat_internal failed", exc_info=True)
+        return None
+
+    async def _storage_timestamp_internal(self, path: str) -> int | None:
+        try:
+            main_request = flipper_pb2.Main()
+            main_request.command_id = self._get_next_command_id()
+            main_request.has_next = False
+
+            req = storage_pb2.TimestampRequest()
+            req.path = path
+            main_request.storage_timestamp_request.CopyFrom(req)
+
+            main_response = await self._send_rpc_message(main_request)
+            if (
+                main_response
+                and main_response.command_status == flipper_pb2.CommandStatus.OK
+                and main_response.HasField("storage_timestamp_response")
+            ):
+                return int(main_response.storage_timestamp_response.timestamp)
+        except Exception:
+            logger.debug("_storage_timestamp_internal failed", exc_info=True)
         return None
 
     async def storage_mkdir(self, path: str) -> bool:
@@ -827,6 +892,40 @@ class ProtobufRPC:
             )
         except Exception:
             logger.debug("_storage_delete_internal failed", exc_info=True)
+            return False
+
+    async def storage_rename(self, old_path: str, new_path: str) -> bool:
+        async with self._io_lock:
+            try:
+                return await asyncio.wait_for(
+                    self._storage_rename_internal(old_path, new_path), timeout=3.0
+                )
+            except Exception:
+                logger.debug(
+                    "storage_rename(%s, %s) timed out or failed",
+                    old_path,
+                    new_path,
+                    exc_info=True,
+                )
+                return False
+
+    async def _storage_rename_internal(self, old_path: str, new_path: str) -> bool:
+        try:
+            main_request = flipper_pb2.Main()
+            main_request.command_id = self._get_next_command_id()
+            main_request.has_next = False
+
+            req = storage_pb2.RenameRequest()
+            req.old_path = old_path
+            req.new_path = new_path
+            main_request.storage_rename_request.CopyFrom(req)
+
+            main_response = await self._send_rpc_message(main_request)
+            return bool(
+                main_response and main_response.command_status == flipper_pb2.CommandStatus.OK
+            )
+        except Exception:
+            logger.debug("_storage_rename_internal failed", exc_info=True)
             return False
 
     async def storage_md5sum(self, path: str) -> str | None:
