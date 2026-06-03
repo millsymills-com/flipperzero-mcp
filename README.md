@@ -1,3 +1,5 @@
+<p align="center"><img src="assets/logo.svg" alt="flipperzero-mcp" width="200"></p>
+
 # flipperzero-mcp
 
 An MCP server for the Flipper Zero. It speaks protobuf RPC to a Flipper over USB
