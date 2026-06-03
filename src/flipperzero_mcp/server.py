@@ -55,7 +55,7 @@ def create_server(config: FlipperConfig | None = None) -> FastMCP:
         name="flipperzero-mcp",
         instructions=(
             "Flipper Zero MCP server. Inspect device connection health and system "
-            "information over USB or WiFi. Call flipper_connection_health before other "
+            "information over USB or WiFi. Call flipperzero_connection_health before other "
             "tools if the device may have disconnected."
         ),
         lifespan=_build_lifespan(config),

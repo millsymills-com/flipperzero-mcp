@@ -6,6 +6,14 @@ An MCP server for the Flipper Zero. It speaks protobuf RPC to a Flipper over USB
 or over WiFi (via an ESP32 WiFi Dev Board) and exposes connection and system
 tools to MCP clients such as Claude Desktop.
 
+## Status
+
+**Stage: S1** (walking skeleton). The server runs over stdio and exposes
+read-only tools (connection health, reconnect, system info) backed by unit tests
+on the default suite. Write tools (CLI exec, file transfer) and the
+`/flipper-install` flagship are the S1→S3 climb tracked in the public-launch
+issues (#37 umbrella).
+
 ## Features
 
 - stdio MCP server (FastMCP).
@@ -13,7 +21,7 @@ tools to MCP clients such as Claude Desktop.
   - **USB** — serial CDC, with CLI → RPC session switching.
   - **WiFi** — TCP to an ESP32 dev board running the TCP↔UART bridge firmware.
 - `auto` transport selection: USB first, WiFi fallback only when a WiFi host is set.
-- Tools: `flipper_connection_health`, `flipper_connection_reconnect`, `systeminfo_get`.
+- Tools: `flipperzero_connection_health`, `flipperzero_connection_reconnect`, `flipperzero_system_info`.
 
 ## Install
 
@@ -60,9 +68,21 @@ falls back to WiFi when `FLIPPER_WIFI_HOST` is set.
 
 | Tool | Description |
 |---|---|
-| `flipper_connection_health` | Report connection health (connected, transport, RPC responsiveness, last error). Optionally pings RPC. |
-| `flipper_connection_reconnect` | Disconnect and reconnect, then report updated health. |
-| `systeminfo_get` | Return device info (name, hardware, firmware), transport, and SD-card availability. |
+| `flipperzero_connection_health` | Report connection health (connected, transport, RPC responsiveness, last error). Optionally pings RPC. |
+| `flipperzero_connection_reconnect` | Disconnect and reconnect, then report updated health. |
+| `flipperzero_system_info` | Return device info (name, hardware, firmware), transport, and SD-card availability. |
+
+## Development
+
+```bash
+uv sync                          # install deps into .venv
+uv run pytest -m "not integration"   # default suite (no hardware required)
+uv run ruff check && uv run ruff format --check
+uv run ty check
+```
+
+Integration tests (`-m integration`) need a real Flipper over USB or WiFi and are
+local-only. See `CLAUDE.md` for project conventions and `CONTRIBUTING.md`.
 
 ## Firmware
 
