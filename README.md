@@ -18,8 +18,8 @@ issues (#37 umbrella).
 
 - stdio MCP server (FastMCP).
 - Two transports for the Flipper protobuf RPC link:
-  - **USB** — serial CDC, with CLI → RPC session switching.
-  - **WiFi** — TCP to an ESP32 dev board running the TCP↔UART bridge firmware.
+  - **USB**: serial CDC, with CLI to RPC session switching.
+  - **WiFi**: TCP to an ESP32 dev board running the TCP-to-UART bridge firmware.
 - `auto` transport selection: USB first, WiFi fallback only when a WiFi host is set.
 - Tools: `flipperzero_connection_health`, `flipperzero_connection_reconnect`, `flipperzero_system_info`.
 
@@ -61,6 +61,7 @@ The server reads `FLIPPER_*` environment variables (or a local `.env`). See
 | `FLIPPER_WIFI_PORT` | `8080` | Dev board TCP port. |
 | `FLIPPER_ENABLE_TX_TOOLS` | `false` | Server-side gate for transmit/destructive CLI commands. Off blocks them regardless of the per-call flag. |
 | `FLIPPER_DEBUG` | `false` | Enable verbose debug logging. |
+| `FLIPPER_FORCE_START_RPC_SESSION` | `false` | Advanced/debug: force `start_rpc_session` even when probing suggests RPC mode is already active. |
 
 With `FLIPPER_TRANSPORT=auto` (the default), the server tries USB first and only
 falls back to WiFi when `FLIPPER_WIFI_HOST` is set.
@@ -85,7 +86,7 @@ on the call.
 ## Development
 
 ```bash
-uv sync                          # install deps into .venv
+uv sync --extra dev              # install runtime + dev deps into .venv
 uv run pytest -m "not integration"   # default suite (no hardware required)
 uv run ruff check && uv run ruff format --check
 uv run ty check
