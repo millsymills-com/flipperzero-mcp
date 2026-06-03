@@ -6,6 +6,12 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+- Dual-mode link manager on `FlipperClient`: `enter_cli()`, `enter_rpc()`, and
+  `mode()` (a `LinkMode` enum) track and switch the shared link between the text
+  CLI and nanopb RPC. A single client-level `_io_lock` now serializes every CLI
+  and RPC round-trip so frames cannot interleave on one link.
+
 ## [0.1.0]
 
 ### Added
