@@ -13,6 +13,7 @@ from typing import Any
 
 from fastmcp import Context, FastMCP
 from fastmcp.exceptions import ToolError
+from mcp.types import ToolAnnotations
 
 from flipperzero_mcp.errors import handle_client_error
 from flipperzero_mcp.tools._common import get_rpc, require_write_tools
@@ -44,7 +45,10 @@ def _verify_md5(local_md5: str, device_md5: str | None, path: str) -> None:
 def register_storage_tools(mcp: FastMCP) -> None:
     """Register the native storage RPC tools."""
 
-    @mcp.tool(tags={"flipper", "storage"})
+    @mcp.tool(
+        tags={"flipper", "storage"},
+        annotations=ToolAnnotations(readOnlyHint=True, idempotentHint=True, openWorldHint=True),
+    )
     async def flipperzero_fs_list(ctx: Context, path: str) -> dict[str, Any]:
         """List a directory on the Flipper's storage.
 
@@ -65,7 +69,12 @@ def register_storage_tools(mcp: FastMCP) -> None:
             handle_client_error(e)
         return {"path": path, "entries": entries}
 
-    @mcp.tool(tags={"flipper", "storage"})
+    @mcp.tool(
+        tags={"flipper", "storage"},
+        annotations=ToolAnnotations(
+            readOnlyHint=False, destructiveHint=False, idempotentHint=False, openWorldHint=True
+        ),
+    )
     async def flipperzero_fs_mkdir(ctx: Context, path: str) -> dict[str, Any]:
         """Create a directory on the Flipper's storage.
 
@@ -89,7 +98,12 @@ def register_storage_tools(mcp: FastMCP) -> None:
             raise ToolError(f"failed to create directory {path} on the device")
         return {"path": path, "created": True}
 
-    @mcp.tool(tags={"flipper", "storage"})
+    @mcp.tool(
+        tags={"flipper", "storage"},
+        annotations=ToolAnnotations(
+            readOnlyHint=False, destructiveHint=True, idempotentHint=True, openWorldHint=True
+        ),
+    )
     async def flipperzero_fs_push(ctx: Context, local_path: str, dest_path: str) -> dict[str, Any]:
         """Push a local file to the Flipper and verify its integrity.
 
@@ -128,7 +142,12 @@ def register_storage_tools(mcp: FastMCP) -> None:
         _verify_md5(local_md5, device_md5, dest_path)
         return {"dest_path": dest_path, "bytes": len(data), "md5": local_md5, "verified": True}
 
-    @mcp.tool(tags={"flipper", "storage"})
+    @mcp.tool(
+        tags={"flipper", "storage"},
+        annotations=ToolAnnotations(
+            readOnlyHint=False, destructiveHint=True, idempotentHint=True, openWorldHint=True
+        ),
+    )
     async def flipperzero_fs_pull(ctx: Context, src_path: str, local_path: str) -> dict[str, Any]:
         """Pull a file from the Flipper to the host and verify its integrity.
 
