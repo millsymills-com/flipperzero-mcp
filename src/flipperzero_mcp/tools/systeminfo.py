@@ -5,10 +5,11 @@ from __future__ import annotations
 from typing import Any
 
 from fastmcp import Context, FastMCP
+from fastmcp.exceptions import ToolError
 from mcp.types import ToolAnnotations
 
 from flipperzero_mcp.errors import _classify_client_error
-from flipperzero_mcp.tools._common import ensure_connected
+from flipperzero_mcp.tools._common import ensure_connected, get_rpc
 
 
 def register_systeminfo_tools(mcp: FastMCP) -> None:
@@ -42,3 +43,76 @@ def register_systeminfo_tools(mcp: FastMCP) -> None:
             "device": device,
             "sd_card_available": sd,
         }
+
+    @mcp.tool(
+        tags={"flipper", "systeminfo"},
+        annotations=ToolAnnotations(readOnlyHint=True, idempotentHint=True, openWorldHint=True),
+    )
+    async def flipperzero_system_power_info(ctx: Context) -> dict[str, Any]:
+        """Return Flipper power/battery information.
+
+        Args:
+            ctx: FastMCP request context carrying the shared Flipper client.
+
+        Returns:
+            Dict with a ``power`` object containing firmware-reported key/value pairs.
+
+        Raises:
+            ToolError: If the device is unreachable or the RPC fails.
+        """
+        try:
+            rpc = await get_rpc(ctx)
+            power = await rpc.system_power_info()
+        except Exception as e:
+            _classify_client_error(e)
+        return {"power": power}
+
+    @mcp.tool(
+        tags={"flipper", "systeminfo"},
+        annotations=ToolAnnotations(readOnlyHint=True, idempotentHint=True, openWorldHint=True),
+    )
+    async def flipperzero_system_protobuf_version(ctx: Context) -> dict[str, Any]:
+        """Return the Flipper protobuf RPC version.
+
+        Args:
+            ctx: FastMCP request context carrying the shared Flipper client.
+
+        Returns:
+            Dict with ``protobuf_version`` containing integer ``major``/``minor`` fields.
+
+        Raises:
+            ToolError: If the device is unreachable or no version is returned.
+        """
+        try:
+            rpc = await get_rpc(ctx)
+            version = await rpc.system_protobuf_version()
+        except Exception as e:
+            _classify_client_error(e)
+        if version is None:
+            raise ToolError("protobuf version unavailable")
+        return {"protobuf_version": version}
+
+    @mcp.tool(
+        tags={"flipper", "systeminfo"},
+        annotations=ToolAnnotations(readOnlyHint=True, idempotentHint=True, openWorldHint=True),
+    )
+    async def flipperzero_system_datetime(ctx: Context) -> dict[str, Any]:
+        """Return the device date/time fields reported by firmware.
+
+        Args:
+            ctx: FastMCP request context carrying the shared Flipper client.
+
+        Returns:
+            Dict with ``datetime`` containing year/month/day/hour/minute/second/weekday.
+
+        Raises:
+            ToolError: If the device is unreachable or no datetime is returned.
+        """
+        try:
+            rpc = await get_rpc(ctx)
+            datetime_fields = await rpc.system_datetime()
+        except Exception as e:
+            _classify_client_error(e)
+        if datetime_fields is None:
+            raise ToolError("device datetime unavailable")
+        return {"datetime": datetime_fields}
