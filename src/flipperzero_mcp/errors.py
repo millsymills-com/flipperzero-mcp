@@ -38,7 +38,7 @@ class FlipperCLIRefusedError(FlipperError):
     """A CLI command was refused: shell chaining, or an ungated transmit/destructive command."""
 
 
-def handle_client_error(error: Exception) -> NoReturn:
+def _classify_client_error(error: Exception) -> NoReturn:
     """Map a Flipper exception to a FastMCP ToolError with an agent-readable message.
 
     Raises:

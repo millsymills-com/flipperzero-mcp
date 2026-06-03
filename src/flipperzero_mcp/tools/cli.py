@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from fastmcp import Context, FastMCP
 
-from flipperzero_mcp.errors import handle_client_error
+from flipperzero_mcp.errors import _classify_client_error
 from flipperzero_mcp.rpc.client import CliExecResult
 from flipperzero_mcp.tools._common import ensure_connected, get_server_context
 
@@ -57,4 +57,4 @@ def register_cli_tools(mcp: FastMCP) -> None:
                 tx_tools_enabled=config.enable_tx_tools,
             )
         except Exception as e:
-            handle_client_error(e)
+            _classify_client_error(e)
