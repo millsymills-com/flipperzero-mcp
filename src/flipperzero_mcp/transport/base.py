@@ -1,5 +1,7 @@
 """Transport layer abstraction for Flipper Zero communication."""
 
+from __future__ import annotations
+
 import asyncio
 import time
 from abc import ABC, abstractmethod

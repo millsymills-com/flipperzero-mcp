@@ -39,12 +39,12 @@ def _make_server(monkeypatch):
 async def test_health_tool_reports_connected(monkeypatch):
     server = _make_server(monkeypatch)
     async with Client(server) as client:
-        result = await client.call_tool("flipper_connection_health", {"probe_rpc": True})
+        result = await client.call_tool("flipperzero_connection_health", {"probe_rpc": True})
         assert result.data["connected"] is True
 
 
 async def test_reconnect_tool_returns_health(monkeypatch):
     server = _make_server(monkeypatch)
     async with Client(server) as client:
-        result = await client.call_tool("flipper_connection_reconnect", {})
+        result = await client.call_tool("flipperzero_connection_reconnect", {})
         assert result.data["reconnect_ok"] is True

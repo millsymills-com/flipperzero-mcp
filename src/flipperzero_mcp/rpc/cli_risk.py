@@ -4,7 +4,7 @@ This is an ordered-prefix denylist and therefore FAILS OPEN: anything unlisted
 (a future subcommand, an app that transmits via ``loader open``, reordered
 arguments) is treated as benign. It is defense-in-depth, not the security
 boundary. The real control is the operator env flag ``FLIPPER_ENABLE_TX_TOOLS``
-checked alongside the per-call acceptance flag in ``flipper_cli_exec``.
+checked alongside the per-call acceptance flag in ``flipperzero_cli_exec``.
 """
 
 from __future__ import annotations

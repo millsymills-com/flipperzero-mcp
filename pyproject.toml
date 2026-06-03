@@ -9,7 +9,7 @@ description = "MCP server for the Flipper Zero (USB + WiFi protobuf RPC)"
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.13"
-authors = [{ name = "millsmillsymills" }]
+authors = [{ name = "millsymills-com" }]
 keywords = ["flipper", "flipper-zero", "mcp", "model-context-protocol", "hardware", "fastmcp", "claude"]
 classifiers = [
     "Development Status :: 3 - Alpha",

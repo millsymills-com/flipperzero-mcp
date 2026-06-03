@@ -13,7 +13,7 @@ def register_cli_tools(mcp: FastMCP) -> None:
     """Register the CLI exec tool."""
 
     @mcp.tool(tags={"flipper", "cli"})
-    async def flipper_cli_exec(
+    async def flipperzero_cli_exec(
         ctx: Context,
         command: str,
         timeout_s: float = 10.0,

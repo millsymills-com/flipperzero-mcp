@@ -1,4 +1,4 @@
-"""flipper_cli_exec tool, client.cli_exec, and the TX two-gate (#39)."""
+"""flipperzero_cli_exec tool, client.cli_exec, and the TX two-gate (#39)."""
 
 import pytest
 from fastmcp import Client
@@ -172,7 +172,7 @@ def _make_server(monkeypatch, *, supports_cli=True, config=None):
 async def test_cli_exec_tool_benign(monkeypatch):
     server = _make_server(monkeypatch)
     async with Client(server) as client:
-        result = await client.call_tool("flipper_cli_exec", {"command": "device info"})
+        result = await client.call_tool("flipperzero_cli_exec", {"command": "device info"})
         assert result.data.output == "hardware: flipper"
         assert result.data.risk == "benign"
 
@@ -182,7 +182,7 @@ async def test_cli_exec_tool_refuses_tx_when_env_disabled(monkeypatch):
     async with Client(server) as client:
         with pytest.raises(ToolError):
             await client.call_tool(
-                "flipper_cli_exec",
+                "flipperzero_cli_exec",
                 {"command": _TX, "i_accept_responsibility": True},
             )
 
@@ -192,7 +192,7 @@ async def test_cli_exec_tool_runs_tx_when_env_enabled_and_accepted(monkeypatch):
     server = _make_server(monkeypatch, config=config)
     async with Client(server) as client:
         result = await client.call_tool(
-            "flipper_cli_exec",
+            "flipperzero_cli_exec",
             {"command": _TX, "i_accept_responsibility": True},
         )
         assert result.data.risk == "transmit"
@@ -202,4 +202,4 @@ async def test_cli_exec_tool_errors_without_cli_transport(monkeypatch):
     server = _make_server(monkeypatch, supports_cli=False)
     async with Client(server) as client:
         with pytest.raises(ToolError):
-            await client.call_tool("flipper_cli_exec", {"command": "device info"})
+            await client.call_tool("flipperzero_cli_exec", {"command": "device info"})

@@ -46,7 +46,7 @@ def handle_client_error(error: Exception) -> NoReturn:
     """
     if isinstance(error, FlipperNotConnectedError):
         raise ToolError(
-            f"Flipper not connected: {error}. Call flipper_connection_reconnect, "
+            f"Flipper not connected: {error}. Call flipperzero_connection_reconnect, "
             "or check USB / FLIPPER_WIFI_HOST."
         ) from error
     if isinstance(error, FlipperTimeoutError):

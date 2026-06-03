@@ -1,5 +1,7 @@
 """WiFi transport for Flipper Zero (ESP32 WiFi Dev Board)."""
 
+from __future__ import annotations
+
 import asyncio
 import logging
 
