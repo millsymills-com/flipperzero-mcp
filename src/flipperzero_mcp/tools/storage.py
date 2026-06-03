@@ -15,7 +15,7 @@ from fastmcp import Context, FastMCP
 from fastmcp.exceptions import ToolError
 
 from flipperzero_mcp.errors import handle_client_error
-from flipperzero_mcp.tools._common import get_rpc
+from flipperzero_mcp.tools._common import get_rpc, require_write_tools
 
 
 def _md5_hex(data: bytes) -> str:
@@ -76,8 +76,10 @@ def register_storage_tools(mcp: FastMCP) -> None:
             Dict with ``path`` and ``created`` (True on success).
 
         Raises:
-            ToolError: If the device is unreachable or the directory cannot be created.
+            ToolError: If write tools are disabled, the device is unreachable, or
+                the directory cannot be created.
         """
+        require_write_tools(ctx)
         try:
             rpc = await get_rpc(ctx)
             created = await rpc.storage_mkdir(path)
@@ -103,9 +105,10 @@ def register_storage_tools(mcp: FastMCP) -> None:
             ``verified`` (True).
 
         Raises:
-            ToolError: If the local file is missing, the write fails, or the
-                device MD5 does not match the local MD5.
+            ToolError: If write tools are disabled, the local file is missing, the
+                write fails, or the device MD5 does not match the local MD5.
         """
+        require_write_tools(ctx)
         source = Path(local_path)
         try:
             data = source.read_bytes()

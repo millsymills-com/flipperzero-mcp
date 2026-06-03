@@ -7,6 +7,9 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Added
+- `FLIPPER_ENABLE_WRITE_TOOLS` env flag (default-off) gating the device-mutating
+  storage writes `flipperzero_fs_push` and `flipperzero_fs_mkdir`. Declares the
+  repo at maturity stage S2.
 - Native storage RPC tools: `flipperzero_fs_list`, `flipperzero_fs_mkdir`,
   `flipperzero_fs_push`, and `flipperzero_fs_pull`. Push and pull verify integrity by
   comparing the local MD5 to the device's `storage_md5sum` and fail loud on

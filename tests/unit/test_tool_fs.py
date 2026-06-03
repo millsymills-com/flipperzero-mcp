@@ -75,10 +75,10 @@ def _make_rpc(*, store=None, md5_override=None, corrupt_read=False):
     return FakeRPC
 
 
-async def _server(monkeypatch, rpc_cls):
+async def _server(monkeypatch, rpc_cls, **config_kwargs):
     monkeypatch.setattr("flipperzero_mcp.server.get_transport", lambda _t, _c: FakeTransport())
     monkeypatch.setattr("flipperzero_mcp.rpc.client.ProtobufRPC", rpc_cls)
-    return create_server(FlipperConfig(_env_file=None))
+    return create_server(FlipperConfig(_env_file=None, **config_kwargs))
 
 
 async def test_fs_list_returns_entries(monkeypatch):
@@ -93,18 +93,25 @@ async def test_fs_list_returns_entries(monkeypatch):
 
 async def test_fs_mkdir_creates_directory(monkeypatch):
     store: dict = {}
-    server = await _server(monkeypatch, _make_rpc(store=store))
+    server = await _server(monkeypatch, _make_rpc(store=store), enable_write_tools=True)
     async with Client(server) as client:
         result = await client.call_tool("flipperzero_fs_mkdir", {"path": "/ext/newdir"})
         assert result.data["created"] is True
         assert "/ext/newdir" in store
 
 
+async def test_fs_mkdir_blocked_without_write_flag(monkeypatch):
+    server = await _server(monkeypatch, _make_rpc())
+    async with Client(server) as client:
+        with pytest.raises(ToolError, match=r"(?i)write tools are disabled"):
+            await client.call_tool("flipperzero_fs_mkdir", {"path": "/ext/newdir"})
+
+
 async def test_fs_push_verifies_md5(monkeypatch, tmp_path):
     store: dict = {}
     local = tmp_path / "payload.bin"
     local.write_bytes(b"hello flipper")
-    server = await _server(monkeypatch, _make_rpc(store=store))
+    server = await _server(monkeypatch, _make_rpc(store=store), enable_write_tools=True)
     async with Client(server) as client:
         result = await client.call_tool(
             "flipperzero_fs_push",
@@ -114,10 +121,22 @@ async def test_fs_push_verifies_md5(monkeypatch, tmp_path):
         assert store["/ext/payload.bin"] == b"hello flipper"
 
 
+async def test_fs_push_blocked_without_write_flag(monkeypatch, tmp_path):
+    local = tmp_path / "payload.bin"
+    local.write_bytes(b"hello flipper")
+    server = await _server(monkeypatch, _make_rpc())
+    async with Client(server) as client:
+        with pytest.raises(ToolError, match=r"(?i)write tools are disabled"):
+            await client.call_tool(
+                "flipperzero_fs_push",
+                {"local_path": str(local), "dest_path": "/ext/payload.bin"},
+            )
+
+
 async def test_fs_push_fails_loud_on_md5_mismatch(monkeypatch, tmp_path):
     local = tmp_path / "payload.bin"
     local.write_bytes(b"hello flipper")
-    server = await _server(monkeypatch, _make_rpc(md5_override="deadbeef"))
+    server = await _server(monkeypatch, _make_rpc(md5_override="deadbeef"), enable_write_tools=True)
     async with Client(server) as client:
         with pytest.raises(ToolError, match=r"(?i)mismatch|integrity"):
             await client.call_tool(
