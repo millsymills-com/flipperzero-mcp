@@ -15,6 +15,14 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `mode()` (a `LinkMode` enum) track and switch the shared link between the text
   CLI and nanopb RPC. A single client-level `_io_lock` now serializes every CLI
   and RPC round-trip so frames cannot interleave on one link.
+- `flipperzero_cli_exec` tool: runs one Flipper CLI command over USB and returns a
+  typed result (`output`, `completed`, `risk`, `warning`). Rejects shell chaining
+  and reads output to the `>:` prompt. USB only — gated by the
+  `supports_cli_text_mode` transport capability (false on the WiFi bridge).
+- TX two-gate: transmit/destructive CLI commands require both the
+  `FLIPPER_ENABLE_TX_TOOLS` server env flag and per-call `i_accept_responsibility`.
+- Advisory risk classifier (`rpc/cli_risk.py`): an ordered-prefix denylist that
+  fails open, classifying transmit/destructive command families as gated.
 
 ## [0.1.0]
 

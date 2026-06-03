@@ -30,6 +30,14 @@ class FlipperProtocolError(FlipperError):
     """A protobuf RPC response was malformed or unexpected."""
 
 
+class FlipperCLIUnavailableError(FlipperError):
+    """The active transport cannot carry the CLI text shell (e.g. WiFi bridge)."""
+
+
+class FlipperCLIRefusedError(FlipperError):
+    """A CLI command was refused: shell chaining, or an ungated transmit/destructive command."""
+
+
 def handle_client_error(error: Exception) -> NoReturn:
     """Map a Flipper exception to a FastMCP ToolError with an agent-readable message.
 
@@ -49,6 +57,13 @@ def handle_client_error(error: Exception) -> NoReturn:
         raise ToolError(f"Flipper connection error: {error}.") from error
     if isinstance(error, FlipperProtocolError):
         raise ToolError(f"Flipper protocol error: {error}.") from error
+    if isinstance(error, FlipperCLIUnavailableError):
+        raise ToolError(
+            f"CLI text mode unavailable: {error}. CLI exec is USB-only; "
+            "the WiFi bridge speaks protobuf RPC only."
+        ) from error
+    if isinstance(error, FlipperCLIRefusedError):
+        raise ToolError(f"CLI command refused: {error}.") from error
     if isinstance(error, FlipperError):
         raise ToolError(f"Flipper error: {error}.") from error
     logger.exception("Unexpected error in tool")

@@ -5,9 +5,16 @@ from __future__ import annotations
 import asyncio
 import enum
 import logging
+import time
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, TypedDict
 
+from flipperzero_mcp.errors import (
+    FlipperCLIRefusedError,
+    FlipperCLIUnavailableError,
+    FlipperNotConnectedError,
+)
+from flipperzero_mcp.rpc.cli_risk import classify
 from flipperzero_mcp.rpc.protobuf_rpc import ProtobufRPC
 
 if TYPE_CHECKING:
@@ -53,6 +60,21 @@ class ReconnectHealth(ConnectionHealth):
 
 _HEALTH_PROBE = b"mcp_health"
 
+_CLI_PROMPT = b">:"
+_CLI_READ_SLICE_S = 0.2
+# Characters that compose multiple shell commands; rejected so one call runs one command.
+_SHELL_CHAINING = (";", "&&", "||", "|", "`", "\n", "\r")
+
+
+class CliExecResult(TypedDict):
+    """Structured result of a single CLI command execution."""
+
+    output: str
+    completed: bool
+    risk: str
+    warning: str | None
+
+
 _NORMALIZED_SOURCE_KEYS = {
     "hardware_name",
     "name",
@@ -62,6 +84,15 @@ _NORMALIZED_SOURCE_KEYS = {
     "firmware",
     "version",
 }
+
+
+def _strip_cli_output(raw: bytes, command: str) -> str:
+    """Remove the echoed command line and the trailing ``>:`` prompt."""
+    text = raw.decode("utf-8", "replace")
+    lines = text.splitlines()
+    if lines and command.strip() in lines[0]:
+        lines = lines[1:]
+    return "\n".join(lines).replace(">:", "").strip()
 
 
 class FlipperClient:
@@ -202,3 +233,105 @@ class FlipperClient:
                 self.last_connection_error = str(exc)
         self._sd_card_available = available
         return available
+
+    async def cli_exec(
+        self,
+        command: str,
+        timeout_s: float = 10.0,
+        accept_responsibility: bool = False,
+        tx_tools_enabled: bool = False,
+    ) -> CliExecResult:
+        """Run one Flipper CLI command in CLI text mode (USB only).
+
+        Drives the device into CLI mode, sends one command, and reads output up
+        to the ``>:`` prompt. Streaming/interactive commands (e.g. ``subghz rx``,
+        ``ir rx``, ``log``) never return to the prompt and time out with
+        ``completed=False`` and partial output.
+
+        Gated (transmit/destructive) commands require BOTH gates: the operator
+        env flag (``tx_tools_enabled``, from ``FLIPPER_ENABLE_TX_TOOLS``) and the
+        per-call ``accept_responsibility``. Either missing -> refused.
+
+        Args:
+            command: Raw CLI command line; one command only (no shell chaining).
+            timeout_s: Seconds to wait for the ``>:`` prompt before returning.
+            accept_responsibility: Per-call intent for gated commands.
+            tx_tools_enabled: Operator env opt-in for gated commands.
+
+        Returns:
+            A CliExecResult with output, completed, risk, and warning.
+
+        Raises:
+            FlipperNotConnectedError: if no live RPC layer is available.
+            FlipperCLIUnavailableError: if the transport has no CLI text mode.
+            FlipperCLIRefusedError: on shell chaining or a gated command missing a gate.
+        """
+        if self.rpc is None:
+            raise FlipperNotConnectedError(self.last_connection_error or "device unavailable")
+        if not self.transport.supports_cli_text_mode:
+            raise FlipperCLIUnavailableError("CLI text mode unavailable over WiFi bridge")
+        self._reject_shell_chaining(command)
+        risk = classify(command)
+        if risk.gated:
+            self._enforce_tx_gate(risk.warning, accept_responsibility, tx_tools_enabled)
+        rpc = self.rpc
+        async with self._io_lock:
+            output, completed = await self._cli_exchange(rpc, command, timeout_s)
+        return {
+            "output": output,
+            "completed": completed,
+            "risk": risk.category,
+            "warning": risk.warning,
+        }
+
+    @staticmethod
+    def _reject_shell_chaining(command: str) -> None:
+        for token in _SHELL_CHAINING:
+            if token in command:
+                raise FlipperCLIRefusedError(
+                    "shell chaining is not allowed; send exactly one command per call "
+                    f"(found {token!r})"
+                )
+
+    @staticmethod
+    def _enforce_tx_gate(
+        warning: str | None, accept_responsibility: bool, tx_tools_enabled: bool
+    ) -> None:
+        if not tx_tools_enabled:
+            raise FlipperCLIRefusedError(
+                "transmit/destructive commands are disabled on this server; the operator "
+                "must set FLIPPER_ENABLE_TX_TOOLS=true to allow them"
+            )
+        if not accept_responsibility:
+            raise FlipperCLIRefusedError(warning or "command requires i_accept_responsibility=true")
+
+    async def _cli_exchange(
+        self, rpc: ProtobufRPC, command: str, timeout_s: float
+    ) -> tuple[str, bool]:
+        """Switch to CLI mode, send one command, and read output to the prompt.
+
+        Caller must hold ``_io_lock``: this drives the shared link directly and
+        must not interleave with RPC traffic.
+        """
+        await rpc.send_stop_session()
+        self._mode = LinkMode.CLI
+        self.transport.clear_receive_buffer()
+        # Ctrl-C cancels any partially typed line; CR yields a fresh prompt.
+        await self.transport.send(b"\x03\r")
+        await self._read_until_prompt(timeout_s=2.0)
+        self.transport.clear_receive_buffer()
+        await self.transport.send(command.encode() + b"\r")
+        raw, completed = await self._read_until_prompt(timeout_s)
+        return _strip_cli_output(raw, command), completed
+
+    async def _read_until_prompt(self, timeout_s: float) -> tuple[bytes, bool]:
+        buf = bytearray()
+        deadline = time.monotonic() + timeout_s
+        while time.monotonic() < deadline:
+            remaining = max(deadline - time.monotonic(), 0.0)
+            chunk = await self.transport.receive(timeout=min(_CLI_READ_SLICE_S, remaining))
+            if chunk:
+                buf.extend(chunk)
+                if buf.rstrip().endswith(_CLI_PROMPT):
+                    return bytes(buf), True
+        return bytes(buf), False

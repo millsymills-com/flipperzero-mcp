@@ -23,6 +23,7 @@ class FlipperConfig(BaseSettings):
     usb_baudrate: int = Field(default=115200, gt=0)
     wifi_host: str | None = None
     wifi_port: int = Field(default=8080, gt=0)
+    enable_tx_tools: bool = False
     debug: bool = False
 
     @property
