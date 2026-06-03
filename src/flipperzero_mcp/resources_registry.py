@@ -33,6 +33,13 @@ def _reader_for(filename: str) -> Callable[[], str]:
 
 
 def register_resources(mcp: FastMCP) -> None:
-    """Register every bundled markdown resource on the server."""
+    """Register every bundled markdown resource on the server.
+
+    Args:
+        mcp: The FastMCP server to attach the ``flipper://`` resources to.
+
+    Returns:
+        None. Resources are registered as a side effect.
+    """
     for uri, filename in _RESOURCES.items():
         mcp.resource(uri, mime_type="text/markdown")(_reader_for(filename))
