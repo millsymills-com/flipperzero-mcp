@@ -26,6 +26,8 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `FLIPPER_ENABLE_TX_TOOLS` server env flag and per-call `i_accept_responsibility`.
 - Advisory risk classifier (`rpc/cli_risk.py`): an ordered-prefix denylist that
   fails open, classifying transmit/destructive command families as gated.
+- Bundled MCP resources (`flipper://reference/*`, `flipper://workflow/*`) and
+  `manage_flipper` / `troubleshoot_connection` prompts.
 
 ## [0.1.0]
 

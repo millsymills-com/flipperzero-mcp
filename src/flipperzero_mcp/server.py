@@ -54,13 +54,19 @@ def create_server(config: FlipperConfig | None = None) -> FastMCP:
     server = FastMCP(
         name="flipperzero-mcp",
         instructions=(
-            "Flipper Zero MCP server. Inspect device connection health and system "
-            "information over USB or WiFi. Call flipperzero_connection_health before other "
-            "tools if the device may have disconnected."
+            "Flipper Zero MCP server. Inspect connection health and system info, manage "
+            "files, and run Flipper CLI commands over USB with flipperzero_cli_exec. Read "
+            "the flipper://reference/* and flipper://workflow/* resources to choose safe "
+            "commands. Call flipperzero_connection_health before other tools if the device "
+            "may have disconnected."
         ),
         lifespan=_build_lifespan(config),
     )
+    from flipperzero_mcp.prompts import register_prompts
+    from flipperzero_mcp.resources_registry import register_resources
     from flipperzero_mcp.tools import register_all_tools
 
     register_all_tools(server)
+    register_resources(server)
+    register_prompts(server)
     return server
