@@ -48,3 +48,13 @@ async def test_reconnect_tool_returns_health(monkeypatch):
     async with Client(server) as client:
         result = await client.call_tool("flipperzero_connection_reconnect", {})
         assert result.data["reconnect_ok"] is True
+
+
+async def test_reconnect_tool_is_not_annotated_idempotent(monkeypatch):
+    server = _make_server(monkeypatch)
+    async with Client(server) as client:
+        tools = await client.list_tools()
+
+    reconnect_tool = next(t for t in tools if t.name == "flipperzero_connection_reconnect")
+    assert reconnect_tool.annotations is not None
+    assert reconnect_tool.annotations.idempotentHint is False
