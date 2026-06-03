@@ -16,7 +16,7 @@ Only the latest release receives security fixes.
 ## WiFi credentials and firmware config
 
 The ESP32 bridge firmware stores the operator's WiFi credentials in NVS at
-runtime (set through the device's captive portal) — they are never written to
+runtime (set through the device's captive portal); they are never written to
 source.
 
 The ESP-IDF build-config file `firmware/tcp_uart_bridge/sdkconfig` is generated

@@ -27,8 +27,8 @@ def _ensure_repo_imports() -> None:
 async def main() -> int:
     _ensure_repo_imports()
 
-    from flipper_mcp.core.transport.wifi import WiFiTransport
-    from flipper_mcp.core.protobuf_rpc import ProtobufRPC
+    from flipperzero_mcp.transport.wifi import WiFiTransport
+    from flipperzero_mcp.rpc.protobuf_rpc import ProtobufRPC
 
     host = (os.environ.get("FLIPPER_WIFI_HOST") or "").strip()
     port_str = (os.environ.get("FLIPPER_WIFI_PORT") or "8080").strip()

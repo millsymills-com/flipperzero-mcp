@@ -1,6 +1,6 @@
 # WiFi Dev Board (ESP32‑S2): Protobuf RPC over WiFi
 
-This guide is a **robust, end-to-end reference** for using the official Flipper **WiFi Dev Board (ESP32‑S2)** with this MCP server. It covers architecture, firmware (“flirmware”) setup, transport configuration, framing, and troubleshooting.
+This guide is an end-to-end reference for using the official Flipper WiFi Dev Board (ESP32‑S2) with this MCP server. It covers architecture, firmware ("flirmware") setup, transport configuration, framing, and troubleshooting.
 
 ## Table of Contents
 
@@ -19,7 +19,7 @@ This guide is a **robust, end-to-end reference** for using the official Flipper 
 
 ## Overview
 
-The WiFi Dev Board runs a small firmware that bridges a **TCP socket** to the Flipper’s **UART Expansion** link. The MCP server uses `WiFiTransport` to open a TCP connection to the Dev Board and then speaks **nanopb-delimited Protobuf RPC** directly.
+The WiFi Dev Board runs a small firmware that bridges a **TCP socket** to the Flipper's **UART Expansion** link. The MCP server uses `WiFiTransport` to open a TCP connection to the Dev Board and then speaks **nanopb-delimited Protobuf RPC** directly.
 
 High level:
 
@@ -36,7 +36,7 @@ Claude Desktop / MCP client
       Flipper Zero
 ```
 
-What’s important:
+What's important:
 
 - The bridge is **transparent**: it forwards bytes bidirectionally.
 - Protobuf RPC framing is **preserved** end-to-end.
@@ -103,7 +103,7 @@ If you need to change these, see the bridge firmware config (`idf.py menuconfig`
 
 ### Where the code lives in this repo
 
-- **Firmware (“flirmware”)**: `firmware/tcp_uart_bridge/`
+- **Firmware ("flirmware")**: `firmware/tcp_uart_bridge/`
 - **Python transport**: `src/flipperzero_mcp/transport/wifi.py`
 - **Auto selection policy**: `src/flipperzero_mcp/transport/auto.py`
 - **Protobuf RPC framing**: `src/flipperzero_mcp/rpc/protobuf_rpc.py`
@@ -196,7 +196,7 @@ This is implemented in:
 Important transport-specific behavior:
 
 - **USB**: may start in CLI mode; the server may need to switch to RPC session.
-- **WiFi**: treated as already “RPC clean” (no CLI switching; no `start_rpc_session` bytes sent).
+- **WiFi**: treated as already "RPC clean" (no CLI switching; no `start_rpc_session` bytes sent).
 
 ---
 
@@ -218,19 +218,19 @@ Expected output includes:
 
 ## Troubleshooting
 
-### Auto mode doesn’t fall back to WiFi
+### Auto mode doesn't fall back to WiFi
 
-- Auto mode only considers WiFi “configured” when `FLIPPER_WIFI_HOST` is set.
+- Auto mode only considers WiFi "configured" when `FLIPPER_WIFI_HOST` is set.
 
-### TCP connects but RPC isn’t responsive
+### TCP connects but RPC isn't responsive
 
 - Verify the Dev Board firmware is running and has completed its Expansion negotiation.
 - Verify the Dev Board is attached to the Flipper and the Flipper is powered on.
 - If you changed firmware defaults, ensure UART pins / TCP port match the config (`idf.py menuconfig`).
 
-### “Connection refused” / can’t reach the TCP port
+### "Connection refused" / can't reach the TCP port
 
-- Confirm the Dev Board’s IP address from the captive portal or your router DHCP leases.
+- Confirm the Dev Board's IP address from the captive portal or your router DHCP leases.
 - Ensure the TCP port matches `BRIDGE_TCP_PORT` in firmware config (default 8080).
 
 ---
