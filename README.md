@@ -59,6 +59,7 @@ The server reads `FLIPPER_*` environment variables (or a local `.env`). See
 | `FLIPPER_USB_BAUDRATE` | `115200` | USB serial baud rate. |
 | `FLIPPER_WIFI_HOST` | (unset) | Dev board IP/hostname. Required for WiFi. |
 | `FLIPPER_WIFI_PORT` | `8080` | Dev board TCP port. |
+| `FLIPPER_ENABLE_TX_TOOLS` | `false` | Server-side gate for transmit/destructive CLI commands. Off blocks them regardless of the per-call flag. |
 | `FLIPPER_DEBUG` | `false` | Enable verbose debug logging. |
 
 With `FLIPPER_TRANSPORT=auto` (the default), the server tries USB first and only
@@ -71,6 +72,11 @@ falls back to WiFi when `FLIPPER_WIFI_HOST` is set.
 | `flipperzero_connection_health` | Report connection health (connected, transport, RPC responsiveness, last error). Optionally pings RPC. |
 | `flipperzero_connection_reconnect` | Disconnect and reconnect, then report updated health. |
 | `flipperzero_system_info` | Return device info (name, hardware, firmware), transport, and SD-card availability. |
+| `flipperzero_cli_exec` | Run one Flipper CLI command and return its output, completion flag, and risk classification. |
+
+CLI exec is USB-only; transmit/destructive commands require both
+`FLIPPER_ENABLE_TX_TOOLS=true` on the server and `i_accept_responsibility=true`
+on the call.
 
 ## Development
 
