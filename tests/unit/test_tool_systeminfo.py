@@ -73,6 +73,19 @@ async def test_system_power_info_returns_key_values(monkeypatch):
         assert result.data["power"]["battery_charge"] == "90"
 
 
+async def test_system_power_info_raises_when_read_fails(monkeypatch):
+    async def _read_fails(self):
+        return None
+
+    monkeypatch.setattr("flipperzero_mcp.server.get_transport", lambda _t, _c: FakeTransport())
+    monkeypatch.setattr("flipperzero_mcp.rpc.client.ProtobufRPC", FakeRPC)
+    monkeypatch.setattr(FakeRPC, "system_power_info", _read_fails)
+    server = create_server(FlipperConfig(_env_file=None))
+    async with Client(server) as client:
+        with pytest.raises(ToolError, match="power info unavailable"):
+            await client.call_tool("flipperzero_system_power_info", {})
+
+
 async def test_system_protobuf_version_returns_major_minor(monkeypatch):
     monkeypatch.setattr("flipperzero_mcp.server.get_transport", lambda _t, _c: FakeTransport())
     monkeypatch.setattr("flipperzero_mcp.rpc.client.ProtobufRPC", FakeRPC)

@@ -58,13 +58,15 @@ def register_systeminfo_tools(mcp: FastMCP) -> None:
             Dict with a ``power`` object containing firmware-reported key/value pairs.
 
         Raises:
-            ToolError: If the device is unreachable or the RPC fails.
+            ToolError: If the device is unreachable or the power-info read fails.
         """
         try:
             rpc = await get_rpc(ctx)
             power = await rpc.system_power_info()
         except Exception as e:
             _classify_client_error(e)
+        if power is None:
+            raise ToolError("power info unavailable")
         return {"power": power}
 
     @mcp.tool(

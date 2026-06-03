@@ -468,16 +468,16 @@ class ProtobufRPC:
             logger.debug("_system_datetime_internal failed", exc_info=True)
         return None
 
-    async def system_power_info(self) -> dict[str, str]:
-        """Return power/battery info key-value pairs from system_power_info_request."""
+    async def system_power_info(self) -> dict[str, str] | None:
+        """Return power/battery key-value pairs, or None if the RPC read failed."""
         async with self._io_lock:
             try:
                 return await asyncio.wait_for(self._system_power_info_internal(), timeout=6.0)
             except Exception:
                 logger.debug("system_power_info timed out or failed", exc_info=True)
-                return {}
+                return None
 
-    async def _system_power_info_internal(self) -> dict[str, str]:
+    async def _system_power_info_internal(self) -> dict[str, str] | None:
         info: dict[str, str] = {}
         try:
             main_request = flipper_pb2.Main()
@@ -487,7 +487,7 @@ class ProtobufRPC:
 
             main_response = await self._send_rpc_message(main_request)
             if not main_response or main_response.command_status != flipper_pb2.CommandStatus.OK:
-                return info
+                return None
 
             def collect(resp: Any) -> None:
                 if resp.HasField("system_power_info_response"):
@@ -509,6 +509,7 @@ class ProtobufRPC:
                 collect(main_response)
         except Exception:
             logger.debug("_system_power_info_internal failed", exc_info=True)
+            return None
         return info
 
     async def app_start(self, name: str, args: str = "") -> bool:
