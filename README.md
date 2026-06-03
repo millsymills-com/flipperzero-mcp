@@ -23,7 +23,7 @@ are the S3 climb tracked in the public-launch issues (#37 umbrella).
   - **USB**: serial CDC, with CLI to RPC session switching.
   - **WiFi**: TCP to an ESP32 dev board running the TCP-to-UART bridge firmware.
 - `auto` transport selection: USB first, WiFi fallback only when a WiFi host is set.
-- Tools: `flipperzero_connection_health`, `flipperzero_connection_reconnect`, `flipperzero_system_info`.
+- Tools: connection health/reconnect, system info, storage list/push/pull/mkdir, and USB CLI exec.
 
 ## Install
 
@@ -85,6 +85,23 @@ falls back to WiFi when `FLIPPER_WIFI_HOST` is set.
 CLI exec is USB-only; transmit/destructive commands require both
 `FLIPPER_ENABLE_TX_TOOLS=true` on the server and `i_accept_responsibility=true`
 on the call.
+
+## Resources & prompts
+
+Bundled MCP resources:
+
+- `flipper://reference/cli`
+- `flipper://reference/connection`
+- `flipper://reference/filesystem`
+- `flipper://workflow/install-app`
+- `flipper://workflow/transfer-files`
+- `flipper://workflow/flash-esp32`
+- `flipper://workflow/capture-replay`
+
+Prompts:
+
+- `manage_flipper`
+- `troubleshoot_connection`
 
 ## Development
 
