@@ -10,6 +10,7 @@ _EXPECTED = {
     "flipper://reference/cli",
     "flipper://reference/connection",
     "flipper://reference/filesystem",
+    "flipper://reference/system",
     "flipper://workflow/install-app",
     "flipper://workflow/transfer-files",
     "flipper://workflow/flash-esp32",
