@@ -6,7 +6,7 @@ from typing import Any
 
 from fastmcp import Context, FastMCP
 
-from flipperzero_mcp.errors import handle_client_error
+from flipperzero_mcp.errors import _classify_client_error
 from flipperzero_mcp.tools._common import ensure_connected
 
 
@@ -30,7 +30,7 @@ def register_systeminfo_tools(mcp: FastMCP) -> None:
             device = await client.get_device_info()
             sd = await client.check_sd_card_available()
         except Exception as e:
-            handle_client_error(e)
+            _classify_client_error(e)
         return {
             "connected": health["connected"],
             "transport": health["transport"]["type"],

@@ -14,7 +14,7 @@ from typing import Any
 from fastmcp import Context, FastMCP
 from fastmcp.exceptions import ToolError
 
-from flipperzero_mcp.errors import handle_client_error
+from flipperzero_mcp.errors import _classify_client_error
 from flipperzero_mcp.tools._common import get_rpc, require_write_tools
 
 
@@ -62,7 +62,7 @@ def register_storage_tools(mcp: FastMCP) -> None:
             rpc = await get_rpc(ctx)
             entries = await rpc.storage_list_detailed(path)
         except Exception as e:
-            handle_client_error(e)
+            _classify_client_error(e)
         return {"path": path, "entries": entries}
 
     @mcp.tool(tags={"flipper", "storage"})
@@ -84,7 +84,7 @@ def register_storage_tools(mcp: FastMCP) -> None:
             rpc = await get_rpc(ctx)
             created = await rpc.storage_mkdir(path)
         except Exception as e:
-            handle_client_error(e)
+            _classify_client_error(e)
         if not created:
             raise ToolError(f"failed to create directory {path} on the device")
         return {"path": path, "created": True}
@@ -123,7 +123,7 @@ def register_storage_tools(mcp: FastMCP) -> None:
         except ToolError:
             raise
         except Exception as e:
-            handle_client_error(e)
+            _classify_client_error(e)
         local_md5 = _md5_hex(data)
         _verify_md5(local_md5, device_md5, dest_path)
         return {"dest_path": dest_path, "bytes": len(data), "md5": local_md5, "verified": True}
@@ -152,7 +152,7 @@ def register_storage_tools(mcp: FastMCP) -> None:
             data = await rpc.storage_read(src_path)
             device_md5 = await rpc.storage_md5sum(src_path)
         except Exception as e:
-            handle_client_error(e)
+            _classify_client_error(e)
         destination = Path(local_path)
         try:
             destination.write_bytes(data)
