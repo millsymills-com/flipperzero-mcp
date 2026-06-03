@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from fastmcp import Context, FastMCP
+from mcp.types import ToolAnnotations
 
 from flipperzero_mcp.errors import _classify_client_error
 from flipperzero_mcp.rpc.client import CliExecResult
@@ -12,7 +13,12 @@ from flipperzero_mcp.tools._common import ensure_connected, get_server_context
 def register_cli_tools(mcp: FastMCP) -> None:
     """Register the CLI exec tool."""
 
-    @mcp.tool(tags={"flipper", "cli"})
+    @mcp.tool(
+        tags={"flipper", "cli"},
+        annotations=ToolAnnotations(
+            readOnlyHint=False, destructiveHint=True, idempotentHint=False, openWorldHint=True
+        ),
+    )
     async def flipperzero_cli_exec(
         ctx: Context,
         command: str,

@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from fastmcp import Context, FastMCP
+from mcp.types import ToolAnnotations
 
 from flipperzero_mcp.rpc.client import ReconnectHealth
 from flipperzero_mcp.tools._common import get_client
@@ -13,7 +14,10 @@ from flipperzero_mcp.tools._common import get_client
 def register_connection_tools(mcp: FastMCP) -> None:
     """Register connection health/reconnect tools."""
 
-    @mcp.tool(tags={"flipper", "connection"})
+    @mcp.tool(
+        tags={"flipper", "connection"},
+        annotations=ToolAnnotations(readOnlyHint=True, idempotentHint=True, openWorldHint=True),
+    )
     async def flipperzero_connection_health(ctx: Context, probe_rpc: bool = True) -> dict[str, Any]:
         """Return authoritative Flipper connection health.
 
@@ -26,7 +30,12 @@ def register_connection_tools(mcp: FastMCP) -> None:
         """
         return dict(await get_client(ctx).get_connection_health(probe_rpc=probe_rpc))
 
-    @mcp.tool(tags={"flipper", "connection"})
+    @mcp.tool(
+        tags={"flipper", "connection"},
+        annotations=ToolAnnotations(
+            readOnlyHint=False, destructiveHint=False, idempotentHint=True, openWorldHint=True
+        ),
+    )
     async def flipperzero_connection_reconnect(
         ctx: Context, probe_rpc: bool = True
     ) -> dict[str, Any]:

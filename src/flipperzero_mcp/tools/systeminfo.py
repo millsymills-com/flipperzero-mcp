@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from fastmcp import Context, FastMCP
+from mcp.types import ToolAnnotations
 
 from flipperzero_mcp.errors import _classify_client_error
 from flipperzero_mcp.tools._common import ensure_connected
@@ -13,7 +14,10 @@ from flipperzero_mcp.tools._common import ensure_connected
 def register_systeminfo_tools(mcp: FastMCP) -> None:
     """Register the systeminfo tool."""
 
-    @mcp.tool(tags={"flipper", "systeminfo"})
+    @mcp.tool(
+        tags={"flipper", "systeminfo"},
+        annotations=ToolAnnotations(readOnlyHint=True, idempotentHint=True, openWorldHint=True),
+    )
     async def flipperzero_system_info(ctx: Context) -> dict[str, Any]:
         """Get system information about the connected Flipper Zero.
 
