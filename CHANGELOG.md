@@ -9,9 +9,9 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [0.1.0]
 
 ### Added
-- `flipper_connection_health` and `flipper_connection_reconnect` tools (callable
+- `flipperzero_connection_health` and `flipperzero_connection_reconnect` tools (callable
   even when disconnected).
-- `systeminfo_get` tool returning device info, transport, and SD-card status.
+- `flipperzero_system_info` tool returning device info, transport, and SD-card status.
 - USB and WiFi transports plus an `auto` selector (USB first, WiFi fallback when
   `FLIPPER_WIFI_HOST` is set).
 - Protobuf RPC implementation with nanopb-delimited framing and vendored
