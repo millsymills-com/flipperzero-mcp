@@ -84,7 +84,7 @@ async def _server(monkeypatch, rpc_cls):
 async def test_fs_list_returns_entries(monkeypatch):
     server = await _server(monkeypatch, _make_rpc())
     async with Client(server) as client:
-        result = await client.call_tool("flipper_fs_list", {"path": "/ext"})
+        result = await client.call_tool("flipperzero_fs_list", {"path": "/ext"})
         entries = result.data["entries"]
         names = {e["name"] for e in entries}
         assert names == {"a.txt", "sub"}
@@ -95,7 +95,7 @@ async def test_fs_mkdir_creates_directory(monkeypatch):
     store: dict = {}
     server = await _server(monkeypatch, _make_rpc(store=store))
     async with Client(server) as client:
-        result = await client.call_tool("flipper_fs_mkdir", {"path": "/ext/newdir"})
+        result = await client.call_tool("flipperzero_fs_mkdir", {"path": "/ext/newdir"})
         assert result.data["created"] is True
         assert "/ext/newdir" in store
 
@@ -107,7 +107,7 @@ async def test_fs_push_verifies_md5(monkeypatch, tmp_path):
     server = await _server(monkeypatch, _make_rpc(store=store))
     async with Client(server) as client:
         result = await client.call_tool(
-            "flipper_fs_push",
+            "flipperzero_fs_push",
             {"local_path": str(local), "dest_path": "/ext/payload.bin"},
         )
         assert result.data["verified"] is True
@@ -121,7 +121,7 @@ async def test_fs_push_fails_loud_on_md5_mismatch(monkeypatch, tmp_path):
     async with Client(server) as client:
         with pytest.raises(ToolError, match=r"(?i)mismatch|integrity"):
             await client.call_tool(
-                "flipper_fs_push",
+                "flipperzero_fs_push",
                 {"local_path": str(local), "dest_path": "/ext/payload.bin"},
             )
 
@@ -133,7 +133,7 @@ async def test_fs_pull_verifies_md5(monkeypatch, tmp_path):
     server = await _server(monkeypatch, _make_rpc(store=store))
     async with Client(server) as client:
         result = await client.call_tool(
-            "flipper_fs_pull",
+            "flipperzero_fs_pull",
             {"src_path": "/ext/src.bin", "local_path": str(out)},
         )
         assert result.data["verified"] is True
@@ -148,6 +148,6 @@ async def test_fs_pull_fails_loud_on_md5_mismatch(monkeypatch, tmp_path):
     async with Client(server) as client:
         with pytest.raises(ToolError, match=r"(?i)mismatch|integrity"):
             await client.call_tool(
-                "flipper_fs_pull",
+                "flipperzero_fs_pull",
                 {"src_path": "/ext/src.bin", "local_path": str(out)},
             )

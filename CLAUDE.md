@@ -6,6 +6,19 @@ Inherits the workspace conventions in `../CLAUDE.md` and the global standards in
 `~/.claude/CLAUDE.md`. Defer to those for code-quality limits, tooling, and
 workflow.
 
+## Canonical standards
+
+This server is graded against the canonical MCP standards at
+`consistency-check/docs/standards/` (`mcp.md` + `python.md` + `mcp-protocol.md` +
+`stages.md`). Self-audit before opening a PR:
+
+```bash
+uv run consistency-check audit --repo flipperzero-mcp
+```
+
+Stage is declared in the README `## Status` section (currently **S1**); the
+auditor scopes rules to the declared stage.
+
 ## Project
 
 stdio MCP server (FastMCP) for the Flipper Zero, speaking protobuf RPC over USB

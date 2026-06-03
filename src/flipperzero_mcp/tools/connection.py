@@ -14,7 +14,7 @@ def register_connection_tools(mcp: FastMCP) -> None:
     """Register connection health/reconnect tools."""
 
     @mcp.tool(tags={"flipper", "connection"})
-    async def flipper_connection_health(ctx: Context, probe_rpc: bool = True) -> dict[str, Any]:
+    async def flipperzero_connection_health(ctx: Context, probe_rpc: bool = True) -> dict[str, Any]:
         """Return authoritative Flipper connection health.
 
         Args:
@@ -27,7 +27,9 @@ def register_connection_tools(mcp: FastMCP) -> None:
         return dict(await get_client(ctx).get_connection_health(probe_rpc=probe_rpc))
 
     @mcp.tool(tags={"flipper", "connection"})
-    async def flipper_connection_reconnect(ctx: Context, probe_rpc: bool = True) -> dict[str, Any]:
+    async def flipperzero_connection_reconnect(
+        ctx: Context, probe_rpc: bool = True
+    ) -> dict[str, Any]:
         """Disconnect and reconnect to the Flipper, then return updated health.
 
         Args:

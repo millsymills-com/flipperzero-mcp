@@ -1,7 +1,7 @@
 """Native storage RPC tools for the Flipper Zero.
 
-Provides `flipper_fs_list`, `flipper_fs_mkdir`, `flipper_fs_push`, and
-`flipper_fs_pull`. Push/pull verify integrity by comparing the local MD5 to the
+Provides `flipperzero_fs_list`, `flipperzero_fs_mkdir`, `flipperzero_fs_push`, and
+`flipperzero_fs_pull`. Push/pull verify integrity by comparing the local MD5 to the
 device's `storage_md5sum`, failing loud on mismatch.
 """
 
@@ -45,7 +45,7 @@ def register_storage_tools(mcp: FastMCP) -> None:
     """Register the native storage RPC tools."""
 
     @mcp.tool(tags={"flipper", "storage"})
-    async def flipper_fs_list(ctx: Context, path: str) -> dict[str, Any]:
+    async def flipperzero_fs_list(ctx: Context, path: str) -> dict[str, Any]:
         """List a directory on the Flipper's storage.
 
         Args:
@@ -66,7 +66,7 @@ def register_storage_tools(mcp: FastMCP) -> None:
         return {"path": path, "entries": entries}
 
     @mcp.tool(tags={"flipper", "storage"})
-    async def flipper_fs_mkdir(ctx: Context, path: str) -> dict[str, Any]:
+    async def flipperzero_fs_mkdir(ctx: Context, path: str) -> dict[str, Any]:
         """Create a directory on the Flipper's storage.
 
         Args:
@@ -88,7 +88,7 @@ def register_storage_tools(mcp: FastMCP) -> None:
         return {"path": path, "created": True}
 
     @mcp.tool(tags={"flipper", "storage"})
-    async def flipper_fs_push(ctx: Context, local_path: str, dest_path: str) -> dict[str, Any]:
+    async def flipperzero_fs_push(ctx: Context, local_path: str, dest_path: str) -> dict[str, Any]:
         """Push a local file to the Flipper and verify its integrity.
 
         Reads ``local_path`` from the host, writes it to ``dest_path`` on the
@@ -126,7 +126,7 @@ def register_storage_tools(mcp: FastMCP) -> None:
         return {"dest_path": dest_path, "bytes": len(data), "md5": local_md5, "verified": True}
 
     @mcp.tool(tags={"flipper", "storage"})
-    async def flipper_fs_pull(ctx: Context, src_path: str, local_path: str) -> dict[str, Any]:
+    async def flipperzero_fs_pull(ctx: Context, src_path: str, local_path: str) -> dict[str, Any]:
         """Pull a file from the Flipper to the host and verify its integrity.
 
         Reads ``src_path`` from the device, writes it to ``local_path`` on the

@@ -7,8 +7,8 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Added
-- Native storage RPC tools: `flipper_fs_list`, `flipper_fs_mkdir`,
-  `flipper_fs_push`, and `flipper_fs_pull`. Push and pull verify integrity by
+- Native storage RPC tools: `flipperzero_fs_list`, `flipperzero_fs_mkdir`,
+  `flipperzero_fs_push`, and `flipperzero_fs_pull`. Push and pull verify integrity by
   comparing the local MD5 to the device's `storage_md5sum` and fail loud on
   mismatch. Adds a `storage_md5sum` method to the protobuf RPC layer.
 - Dual-mode link manager on `FlipperClient`: `enter_cli()`, `enter_rpc()`, and
@@ -19,9 +19,9 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [0.1.0]
 
 ### Added
-- `flipper_connection_health` and `flipper_connection_reconnect` tools (callable
+- `flipperzero_connection_health` and `flipperzero_connection_reconnect` tools (callable
   even when disconnected).
-- `systeminfo_get` tool returning device info, transport, and SD-card status.
+- `flipperzero_system_info` tool returning device info, transport, and SD-card status.
 - USB and WiFi transports plus an `auto` selector (USB first, WiFi fallback when
   `FLIPPER_WIFI_HOST` is set).
 - Protobuf RPC implementation with nanopb-delimited framing and vendored
