@@ -8,11 +8,13 @@ tools to MCP clients such as Claude Desktop.
 
 ## Status
 
-**Stage: S1** (walking skeleton). The server runs over stdio and exposes
-read-only tools (connection health, reconnect, system info) backed by unit tests
-on the default suite. Write tools (CLI exec, file transfer) and the
-`/flipper-install` flagship are the S1→S3 climb tracked in the public-launch
-issues (#37 umbrella).
+**Stage: S2** (wrapped). The server runs over stdio with read tools (connection
+health, reconnect, system info, `fs_list`) and write tools (`fs_mkdir`,
+`fs_push`, `cli_exec`). Device-mutating storage writes are gated behind
+`FLIPPER_ENABLE_WRITE_TOOLS` and transmit/destructive CLI commands behind
+`FLIPPER_ENABLE_TX_TOOLS`, both default-off. CI runs lint and tests on the
+committed lockfile. The `/flipper-install` flagship and live integration suite
+are the S3 climb tracked in the public-launch issues (#37 umbrella).
 
 ## Features
 
@@ -59,6 +61,7 @@ The server reads `FLIPPER_*` environment variables (or a local `.env`). See
 | `FLIPPER_USB_BAUDRATE` | `115200` | USB serial baud rate. |
 | `FLIPPER_WIFI_HOST` | (unset) | Dev board IP/hostname. Required for WiFi. |
 | `FLIPPER_WIFI_PORT` | `8080` | Dev board TCP port. |
+| `FLIPPER_ENABLE_WRITE_TOOLS` | `false` | Server-side gate for device-mutating storage writes (`fs_push`, `fs_mkdir`). Off blocks them. |
 | `FLIPPER_ENABLE_TX_TOOLS` | `false` | Server-side gate for transmit/destructive CLI commands. Off blocks them regardless of the per-call flag. |
 | `FLIPPER_DEBUG` | `false` | Enable verbose debug logging. |
 | `FLIPPER_FORCE_START_RPC_SESSION` | `false` | Advanced/debug: force `start_rpc_session` even when probing suggests RPC mode is already active. |

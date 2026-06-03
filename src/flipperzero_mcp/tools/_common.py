@@ -5,6 +5,8 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
+from fastmcp.exceptions import ToolError
+
 from flipperzero_mcp.errors import FlipperNotConnectedError
 
 if TYPE_CHECKING:
@@ -20,6 +22,22 @@ logger = logging.getLogger(__name__)
 def get_server_context(ctx: Context) -> ServerContext:
     """Return the typed lifespan context for a tool call."""
     return ctx.lifespan_context  # ty: ignore[invalid-return-type]
+
+
+def require_write_tools(ctx: Context) -> None:
+    """Gate device-mutating tools behind the write-tools opt-in.
+
+    Args:
+        ctx: FastMCP request context carrying the server config.
+
+    Raises:
+        ToolError: If ``FLIPPER_ENABLE_WRITE_TOOLS`` is not enabled.
+    """
+    if not get_server_context(ctx).config.enable_write_tools:
+        raise ToolError(
+            "Write tools are disabled. Set FLIPPER_ENABLE_WRITE_TOOLS=true to allow "
+            "device-mutating storage operations (fs_push, fs_mkdir)."
+        )
 
 
 def get_client(ctx: Context) -> FlipperClient:

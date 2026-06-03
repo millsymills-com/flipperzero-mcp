@@ -24,6 +24,7 @@ class FlipperConfig(BaseSettings):
     wifi_host: str | None = None
     wifi_port: int = Field(default=8080, gt=0)
     enable_tx_tools: bool = False
+    enable_write_tools: bool = False
     debug: bool = False
 
     @property
