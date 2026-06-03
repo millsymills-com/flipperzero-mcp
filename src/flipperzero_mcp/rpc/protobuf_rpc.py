@@ -7,13 +7,16 @@ https://github.com/flipperdevices/flipperzero-protobuf
 Uses generated protobuf code from proto/ directory.
 """
 
+from __future__ import annotations
+
 import asyncio
 import logging
 import os
 import time
 from typing import TYPE_CHECKING, Any
 
-from flipperzero_mcp.transport.base import FlipperTransport
+if TYPE_CHECKING:
+    from flipperzero_mcp.transport.base import FlipperTransport
 
 logger = logging.getLogger(__name__)
 
