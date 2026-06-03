@@ -72,6 +72,10 @@ falls back to WiFi when `FLIPPER_WIFI_HOST` is set.
 | `flipperzero_connection_health` | Report connection health (connected, transport, RPC responsiveness, last error). Optionally pings RPC. |
 | `flipperzero_connection_reconnect` | Disconnect and reconnect, then report updated health. |
 | `flipperzero_system_info` | Return device info (name, hardware, firmware), transport, and SD-card availability. |
+| `flipperzero_fs_list` | List a device directory; returns typed entries (name, type, size, optional md5). |
+| `flipperzero_fs_mkdir` | Create a directory on the device storage. |
+| `flipperzero_fs_push` | Upload a local file to the device and verify integrity against the device MD5. |
+| `flipperzero_fs_pull` | Download a device file to the host and verify integrity against the device MD5. |
 | `flipperzero_cli_exec` | Run one Flipper CLI command and return its output, completion flag, and risk classification. |
 
 CLI exec is USB-only; transmit/destructive commands require both
