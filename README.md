@@ -9,8 +9,8 @@ tools to MCP clients such as Claude Desktop.
 ## Status
 
 **Stage: S2** (wrapped). The server runs over stdio with read tools (connection
-health, reconnect, system info/power/datetime/protobuf-version, storage read tools
-(`fs_info`, `fs_stat`, `fs_timestamp`, `fs_list`, `fs_pull`) and write tools
+health, reconnect, system info/power/datetime/protobuf-version, and storage reads
+`fs_info`, `fs_stat`, `fs_timestamp`, `fs_list`, `fs_pull`) and write tools
 (`fs_mkdir`, `fs_delete`, `fs_rename`, `fs_push`, `app_start`, `cli_exec`).
 Device-mutating storage/app operations are gated behind
 `FLIPPER_ENABLE_WRITE_TOOLS` and transmit/destructive CLI commands behind
