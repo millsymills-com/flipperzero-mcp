@@ -9,7 +9,14 @@ if TYPE_CHECKING:
 
 
 def register_prompts(mcp: FastMCP) -> None:
-    """Register Flipper workflow prompts."""
+    """Register Flipper workflow prompts.
+
+    Args:
+        mcp: The FastMCP server to attach the workflow prompts to.
+
+    Returns:
+        None. Prompts are registered as a side effect.
+    """
 
     @mcp.prompt
     def manage_flipper() -> str:
