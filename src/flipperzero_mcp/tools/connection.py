@@ -33,7 +33,7 @@ def register_connection_tools(mcp: FastMCP) -> None:
     @mcp.tool(
         tags={"flipper", "connection"},
         annotations=ToolAnnotations(
-            readOnlyHint=False, destructiveHint=False, idempotentHint=True, openWorldHint=True
+            readOnlyHint=False, destructiveHint=False, idempotentHint=False, openWorldHint=True
         ),
     )
     async def flipperzero_connection_reconnect(

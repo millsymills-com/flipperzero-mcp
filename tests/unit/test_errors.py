@@ -2,6 +2,8 @@ import pytest
 from fastmcp.exceptions import ToolError
 
 from flipperzero_mcp.errors import (
+    FlipperCLIRefusedError,
+    FlipperCLIUnavailableError,
     FlipperConnectionError,
     FlipperError,
     FlipperNotConnectedError,
@@ -37,6 +39,16 @@ def test__classify_client_error_maps_connection_error():
 def test__classify_client_error_maps_protocol_error():
     with pytest.raises(ToolError, match="protocol error"):
         _classify_client_error(FlipperProtocolError("malformed frame"))
+
+
+def test__classify_client_error_maps_cli_unavailable():
+    with pytest.raises(ToolError, match="CLI text mode unavailable"):
+        _classify_client_error(FlipperCLIUnavailableError("wifi transport"))
+
+
+def test__classify_client_error_maps_cli_refused():
+    with pytest.raises(ToolError, match="CLI command refused"):
+        _classify_client_error(FlipperCLIRefusedError("transmit gate disabled"))
 
 
 def test__classify_client_error_maps_base_flipper_error():

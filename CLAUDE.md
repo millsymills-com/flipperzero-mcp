@@ -28,6 +28,10 @@ or WiFi.
 
 - **stdout is the JSON-RPC channel.** All logging goes to stderr (see
   `_logging.py`). Never `print` to stdout.
+- **Tool idempotency annotations are behavioral, not just end-state based.**
+  Tools that cycle state on every call (for example disconnect/reconnect) must
+  use `idempotentHint=False` even if they usually converge to the same final
+  state.
 - **Protobuf runtime is pinned to `protobuf==6.33.5`** (forward-compatible with
   the vendored bindings in `src/flipperzero_mcp/rpc/protobuf_gen/`, which embed a
   6.33.2 assertion; bumped for CVE-2026-0994). Keep the pin's major.minor at
