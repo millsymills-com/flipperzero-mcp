@@ -21,19 +21,8 @@ def register_cli_tools(mcp: FastMCP) -> None:
     ) -> CliExecResult:
         """Run one Flipper CLI command over USB and return its output.
 
-        USB only: this fails over the WiFi bridge transport. Send exactly one
-        command per call; shell chaining (``;``, ``&&``, ``||``, ``|``, backticks,
-        newlines) is rejected. Streaming/interactive commands (``subghz rx``,
-        ``ir rx``, ``log``, ``input dump``) never return to the prompt and time
-        out with ``completed=false`` and partial output.
-
-        Transmit/destructive commands (``subghz tx``, ``ir tx``, ``rfid write``,
-        ``ikey write``, ``factory reset``, ``storage format``, ``power off``,
-        ``power reboot``, ``update install``) require BOTH the operator env flag
-        ``FLIPPER_ENABLE_TX_TOOLS=true`` and ``i_accept_responsibility=true``;
-        either missing and the command is refused.
-
         Args:
+            ctx: FastMCP request context carrying the shared Flipper client.
             command: Raw CLI command line, e.g. "storage list /ext".
             timeout_s: Seconds to wait for the ``>:`` prompt (default 10).
             i_accept_responsibility: Per-call intent for gated commands.
@@ -45,6 +34,18 @@ def register_cli_tools(mcp: FastMCP) -> None:
         Raises:
             ToolError: if not connected, the transport has no CLI text mode, the
                 command chains shells, or a gated command is missing a gate.
+
+        USB only: this fails over the WiFi bridge transport. Send exactly one
+        command per call; shell chaining (``;``, ``&&``, ``||``, ``|``, backticks,
+        newlines) is rejected. Streaming/interactive commands (``subghz rx``,
+        ``ir rx``, ``log``, ``input dump``) never return to the prompt and time
+        out with ``completed=false`` and partial output.
+
+        Transmit/destructive commands (``subghz tx``, ``ir tx``, ``rfid write``,
+        ``ikey write``, ``factory reset``, ``storage format``, ``power off``,
+        ``power reboot``, ``update install``) require BOTH the operator env flag
+        ``FLIPPER_ENABLE_TX_TOOLS=true`` and ``i_accept_responsibility=true``;
+        either missing and the command is refused.
         """
         try:
             config = get_server_context(ctx).config
