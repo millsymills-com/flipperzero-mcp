@@ -14,8 +14,11 @@ def register_systeminfo_tools(mcp: FastMCP) -> None:
     """Register the systeminfo tool."""
 
     @mcp.tool(tags={"flipper", "systeminfo"})
-    async def systeminfo_get(ctx: Context) -> dict[str, Any]:
+    async def flipperzero_system_info(ctx: Context) -> dict[str, Any]:
         """Get system information about the connected Flipper Zero.
+
+        Args:
+            ctx: FastMCP request context carrying the shared Flipper client.
 
         Returns:
             Dict with connection status, transport, device info (name/hardware/firmware),
