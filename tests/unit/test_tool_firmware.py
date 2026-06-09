@@ -7,7 +7,9 @@ from fastmcp import Client
 from fastmcp.exceptions import ToolError
 
 from flipperzero_mcp.config import FlipperConfig
+from flipperzero_mcp.firmware.flavor import classify
 from flipperzero_mcp.server import create_server
+from flipperzero_mcp.tools.firmware import _reconnect_and_classify
 
 
 class FakeTransport:
@@ -147,3 +149,65 @@ async def test_firmware_install_fails_closed_when_hardware_name_missing(monkeypa
                 "flipperzero_firmware_install",
                 {"source": {"path": "/tmp/x.tgz"}, "confirm": "Flipper Zero"},  # noqa: S108
             )
+
+
+def _info(version: str):
+    return {"hardware_target": "7", "firmware_version": version}
+
+
+class FakeReconnectClient:
+    """Replays a queue of device_info dicts across reconnect polls."""
+
+    def __init__(self, readings):
+        self._readings = list(readings)
+        self._info: dict[str, str] | None = None
+
+    async def disconnect(self):
+        return None
+
+    async def connect(self):
+        self._info = self._readings.pop(0) if self._readings else None
+        return self._info is not None
+
+    async def get_device_info(self):
+        assert self._info is not None
+        return self._info
+
+
+@pytest.fixture
+def _no_sleep(monkeypatch):
+    async def _instant(_seconds):
+        return None
+
+    monkeypatch.setattr("flipperzero_mcp.tools.firmware.asyncio.sleep", _instant)
+
+
+@pytest.mark.asyncio
+@pytest.mark.usefixtures("_no_sleep")
+async def test_reconnect_confirms_on_version_change():
+    before = classify(_info("1.2.3"))
+    client = FakeReconnectClient([_info("1.2.3"), _info("2.0.0")])
+    after, confirmed = await _reconnect_and_classify(client, before)
+    assert confirmed is True
+    assert after.version == "2.0.0"
+
+
+@pytest.mark.asyncio
+@pytest.mark.usefixtures("_no_sleep")
+async def test_reconnect_best_effort_when_version_never_changes(monkeypatch):
+    monkeypatch.setattr("flipperzero_mcp.tools.firmware._RECONNECT_BUDGET_S", 15.0)
+    before = classify(_info("1.2.3"))
+    client = FakeReconnectClient([_info("1.2.3"), _info("1.2.3"), _info("1.2.3")])
+    after, confirmed = await _reconnect_and_classify(client, before)
+    assert confirmed is False
+    assert after.version == "1.2.3"
+
+
+@pytest.mark.asyncio
+@pytest.mark.usefixtures("_no_sleep")
+async def test_reconnect_raises_when_device_never_returns(monkeypatch):
+    monkeypatch.setattr("flipperzero_mcp.tools.firmware._RECONNECT_BUDGET_S", 15.0)
+    before = classify(_info("1.2.3"))
+    client = FakeReconnectClient([])  # connect() always fails
+    with pytest.raises(ToolError, match="did not reconnect"):
+        await _reconnect_and_classify(client, before)
