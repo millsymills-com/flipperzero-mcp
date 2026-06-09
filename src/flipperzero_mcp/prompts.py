@@ -60,8 +60,9 @@ def register_prompts(mcp: FastMCP) -> None:
             "2. Device + firmware: `flipperzero_system_info` — record name, hardware, "
             "firmware channel/version, and `sd_card_available`.\n"
             "3. Protobuf compatibility: `flipperzero_system_protobuf_version`.\n"
-            '4. CLI shell (USB only): `flipperzero_cli_exec "help"` to confirm the text '
-            "console responds; expect it to fail over WiFi (see `flipper://reference/cli`).\n"
+            '4. CLI shell: only if on USB, `flipperzero_cli_exec "help"` to confirm the text '
+            "console responds. Skip on WiFi — `cli_exec` is USB-only and would error "
+            "(see `flipper://reference/cli`); record it as N/A rather than fail.\n"
             "5. TX/destructive gate: report whether `FLIPPER_ENABLE_TX_TOOLS` is enabled; "
             "do not run gated commands here.\n"
             "Summarize as pass/warn/fail per check with the next action for any non-pass."
@@ -88,7 +89,7 @@ def register_prompts(mcp: FastMCP) -> None:
             "`flipperzero_fs_push` the `.fap` (it verifies the device MD5 and raises on "
             "mismatch).\n"
             "6. Confirm placement with `flipperzero_fs_list` for that directory.\n"
-            '7. Launch: `flipperzero_cli_exec "loader open <AppName>"`; stop with '
-            "`loader close`.\n"
+            "7. Launch with `flipperzero_app_start` (`name` = the app name); it runs over "
+            'RPC on USB or WiFi. Stop with `flipperzero_cli_exec "loader close"` (USB only).\n'
             "8. Report channel/version, built `.fap`, push verification, and launch result."
         )
