@@ -7,6 +7,7 @@ import hashlib
 import logging
 from typing import Any, Protocol
 
+from flipperzero_mcp.errors import FlipperTimeoutError
 from flipperzero_mcp.firmware.codes import update_code_message
 
 logger = logging.getLogger(__name__)
@@ -111,7 +112,10 @@ async def install_bundle(rpc: _RPCLike, bundle: _BundleLike, *, pkg_name: str) -
             raise FlashError(f"md5 mismatch after writing {dest}")
 
     manifest = f"{pkg_dir}/{bundle.manifest_name}"
-    code = await rpc.system_update(manifest)
+    try:
+        code = await rpc.system_update(manifest)
+    except FlipperTimeoutError as e:
+        raise FlashError(f"device link dropped during update validation: {e}") from e
     message = update_code_message(code)
     if message is not None:
         raise FlashError(f"device rejected update: {message}")

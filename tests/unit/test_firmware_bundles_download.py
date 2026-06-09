@@ -116,6 +116,52 @@ async def test_momentum_download_verifies_digest(httpx_mock):
 
 
 @pytest.mark.asyncio
+async def test_official_download_wraps_http_error_as_bundle_error(httpx_mock):
+    httpx_mock.add_response(
+        url="https://update.flipperzero.one/firmware/directory.json", status_code=503
+    )
+    with pytest.raises(BundleError, match="failed to fetch"):
+        await download_bundle(
+            FirmwareFlavor.OFFICIAL, channel="release", version="latest", target="f7"
+        )
+
+
+@pytest.mark.asyncio
+async def test_official_download_wraps_malformed_json_as_bundle_error(httpx_mock):
+    httpx_mock.add_response(
+        url="https://update.flipperzero.one/firmware/directory.json", text="<html>not json"
+    )
+    with pytest.raises(BundleError, match="malformed JSON"):
+        await download_bundle(
+            FirmwareFlavor.OFFICIAL, channel="release", version="latest", target="f7"
+        )
+
+
+@pytest.mark.asyncio
+async def test_official_download_wraps_missing_url_key_as_bundle_error(httpx_mock):
+    directory = {
+        "channels": [
+            {
+                "id": "release",
+                "versions": [
+                    {
+                        "version": "1.4.3",
+                        "files": [{"target": "f7", "type": "update_tgz", "sha256": "0" * 64}],
+                    }
+                ],
+            }
+        ]
+    }
+    httpx_mock.add_response(
+        url="https://update.flipperzero.one/firmware/directory.json", text=json.dumps(directory)
+    )
+    with pytest.raises(BundleError, match="malformed official bundle entry"):
+        await download_bundle(
+            FirmwareFlavor.OFFICIAL, channel="release", version="latest", target="f7"
+        )
+
+
+@pytest.mark.asyncio
 async def test_momentum_download_aborts_without_digest(httpx_mock):
     tgz = _tgz_bytes()
     releases = [

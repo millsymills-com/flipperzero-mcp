@@ -28,11 +28,11 @@ def _frame(names: list[str], *, has_next: bool, status: int = flipper_pb2.Comman
 
 class _StubRPC(ProtobufRPC):
     def __init__(self, first, continuations):
-        super().__init__(transport=None)  # transport unused by the framing path
+        super().__init__(transport=None)  # ty: ignore[invalid-argument-type]
         self._first = first
         self._continuations = list(continuations)
 
-    async def _send_rpc_message(self, _request):
+    async def _send_rpc_message(self, main_message):  # noqa: ARG002
         return self._first
 
     async def _receive_main_message(self, timeout: float = 2.5):  # noqa: ARG002
