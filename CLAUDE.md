@@ -16,7 +16,7 @@ This server is graded against the canonical MCP standards at
 uv run consistency-check audit --repo flipperzero-mcp
 ```
 
-Stage is declared in the README `## Status` section (currently **S1**); the
+Stage is declared in the README `## Status` section (currently **S2**); the
 auditor scopes rules to the declared stage.
 
 ## Project
