@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
-from typing import Protocol
+from typing import Any, Protocol
 
 from flipperzero_mcp.firmware.codes import update_code_message
 
@@ -18,7 +18,7 @@ class FlashError(RuntimeError):
 
 
 class _RPCLike(Protocol):
-    async def get_device_info(self) -> dict[str, str]: ...
+    async def get_device_info(self) -> dict[str, Any]: ...
     async def storage_mkdir(self, path: str) -> bool: ...
     async def storage_write(self, path: str, content: bytes) -> bool: ...
     async def storage_md5sum(self, path: str) -> str | None: ...
@@ -62,7 +62,6 @@ async def install_bundle(rpc: _RPCLike, bundle: _BundleLike, *, pkg_name: str) -
         if not await rpc.storage_write(dest, data):
             raise FlashError(f"failed to write {dest}")
         device_md5 = await rpc.storage_md5sum(dest)
-        # usedforsecurity=False: mirrors device storage_md5sum integrity check, not crypto
         expected_md5 = hashlib.md5(data, usedforsecurity=False).hexdigest()
         if device_md5 != expected_md5:
             raise FlashError(f"md5 mismatch after writing {dest}")
