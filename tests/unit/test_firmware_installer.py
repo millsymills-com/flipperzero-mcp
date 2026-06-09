@@ -6,8 +6,21 @@ from typing import ClassVar
 import pytest
 
 from flipperzero_mcp.errors import FlipperTimeoutError
-from flipperzero_mcp.firmware.installer import FlashError, _verify_md5, install_bundle
+from flipperzero_mcp.firmware.installer import (
+    FlashError,
+    _probe_session,
+    _verify_md5,
+    install_bundle,
+)
 from flipperzero_mcp.rpc.protobuf_gen import system_pb2
+
+
+@pytest.fixture(autouse=True)
+def _no_settle(monkeypatch):
+    async def _instant(_seconds):
+        return None
+
+    monkeypatch.setattr("flipperzero_mcp.firmware.installer.asyncio.sleep", _instant)
 
 
 class _Md5RPC:
@@ -77,6 +90,10 @@ class FakeRPC:
     async def storage_md5sum(self, path):
         return hashlib.md5(self.store[path], usedforsecurity=False).hexdigest()
 
+    async def ping(self):
+        self.calls.append("ping")
+        return b"ping"
+
     async def system_update(self, manifest_path):
         self.calls.append(f"update:{manifest_path}")
         return self._update_code
@@ -129,3 +146,33 @@ async def test_install_wraps_link_drop_during_update_as_flash_error():
     with pytest.raises(FlashError, match="link dropped"):
         await install_bundle(rpc, FakeBundle(), pkg_name="upd-test")
     assert rpc.rebooted is False
+
+
+@pytest.mark.asyncio
+async def test_install_aborts_when_session_wedges_after_write():
+    class WedgeRPC(FakeRPC):
+        async def ping(self):
+            return None  # session unresponsive after the write
+
+    rpc = WedgeRPC()
+    with pytest.raises(FlashError, match="stopped responding"):
+        await install_bundle(rpc, FakeBundle(), pkg_name="upd-test")
+    assert rpc.rebooted is False
+
+
+@pytest.mark.asyncio
+async def test_probe_session_false_when_ping_raises():
+    class WedgeRPC:
+        async def ping(self):
+            raise FlipperTimeoutError("no response to ping")
+
+    assert await _probe_session(WedgeRPC(), settle_s=0.0) is False
+
+
+@pytest.mark.asyncio
+async def test_probe_session_true_when_ping_answers():
+    class HealthyRPC:
+        async def ping(self):
+            return b"ping"
+
+    assert await _probe_session(HealthyRPC(), settle_s=0.0) is True

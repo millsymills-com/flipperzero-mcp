@@ -17,6 +17,9 @@ _UPDATE_ROOT = "/ext/update"
 # to SD; retry across this many attempts with a settle delay before trusting it.
 _MD5_ATTEMPTS = 5
 _MD5_SETTLE_S = 2.0
+# Aggressive back-to-back multi-MB writes can wedge the RPC session; pace each
+# file with a short settle and probe the session before continuing.
+_INTER_FILE_SETTLE_S = 0.5
 
 
 class FlashError(RuntimeError):
@@ -28,8 +31,13 @@ class _RPCLike(Protocol):
     async def storage_mkdir(self, path: str) -> bool: ...
     async def storage_write(self, path: str, content: bytes) -> bool: ...
     async def storage_md5sum(self, path: str) -> str | None: ...
+    async def ping(self) -> bytes | None: ...
     async def system_update(self, manifest_path: str) -> int: ...
     async def system_reboot_update(self) -> None: ...
+
+
+class _SessionProbe(Protocol):
+    async def ping(self) -> bytes | None: ...
 
 
 class _BundleLike(Protocol):
@@ -73,6 +81,27 @@ async def _verify_md5(
     return False
 
 
+async def _probe_session(rpc: _SessionProbe, *, settle_s: float = _INTER_FILE_SETTLE_S) -> bool:
+    """Pace the writes and confirm the RPC session still responds.
+
+    A short settle gives the device time to flush, then a cheap ``ping``
+    detects a wedged session before the reboot step, so a stalled flash fails
+    closed with a recovery hint instead of leaving a half-written update.
+
+    Args:
+        rpc: Live RPC client.
+        settle_s: Delay before probing (0 in tests for determinism).
+
+    Returns:
+        True if the session answered the ping; False if it is unresponsive.
+    """
+    await asyncio.sleep(settle_s)
+    try:
+        return await rpc.ping() is not None
+    except (OSError, RuntimeError, FlipperTimeoutError):
+        return False
+
+
 async def install_bundle(rpc: _RPCLike, bundle: _BundleLike, *, pkg_name: str) -> None:
     """Push ``bundle`` to ``/ext/update/<pkg_name>`` and reboot into the updater.
 
@@ -110,6 +139,12 @@ async def install_bundle(rpc: _RPCLike, bundle: _BundleLike, *, pkg_name: str) -
         expected_md5 = hashlib.md5(data, usedforsecurity=False).hexdigest()
         if not await _verify_md5(rpc, dest, expected_md5):
             raise FlashError(f"md5 mismatch after writing {dest}")
+        if not await _probe_session(rpc):
+            raise FlashError(
+                f"device RPC session stopped responding after writing {dest}; the "
+                "update was not applied - power-cycle the Flipper (or enter DFU and "
+                "recover with qFlipper) before retrying"
+            )
 
     manifest = f"{pkg_dir}/{bundle.manifest_name}"
     try:
