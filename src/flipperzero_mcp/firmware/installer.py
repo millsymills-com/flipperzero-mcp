@@ -45,7 +45,12 @@ async def install_bundle(rpc: _RPCLike, bundle: _BundleLike, *, pkg_name: str) -
             result code. The device is not rebooted when this is raised.
     """
     device_info = await rpc.get_device_info()
-    device_target = f"f{device_info.get('hardware_target', '').strip()}"
+    raw_target = device_info.get("hardware_target", "").strip()
+    if not raw_target:
+        raise FlashError(
+            "device did not report hardware_target; cannot verify bundle compatibility"
+        )
+    device_target = f"f{raw_target}"
     if device_target != bundle.target:
         raise FlashError(
             f"bundle target {bundle.target} does not match device target {device_target}"

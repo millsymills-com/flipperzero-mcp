@@ -68,6 +68,14 @@ async def test_install_aborts_on_target_mismatch():
 
 
 @pytest.mark.asyncio
+async def test_install_aborts_on_missing_hardware_target():
+    rpc = FakeRPC(target="")
+    with pytest.raises(FlashError, match="hardware_target"):
+        await install_bundle(rpc, FakeBundle(), pkg_name="upd-test")
+    assert rpc.rebooted is False
+
+
+@pytest.mark.asyncio
 async def test_install_aborts_on_non_ok_update_code():
     rpc = FakeRPC(update_code=system_pb2.UpdateResponse.ManifestInvalid)
     with pytest.raises(FlashError, match="manifest"):

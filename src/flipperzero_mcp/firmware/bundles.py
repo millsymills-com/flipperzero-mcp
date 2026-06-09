@@ -45,10 +45,13 @@ def _members_from_tar(tar: tarfile.TarFile) -> list[tuple[str, bytes]]:
     prefix = members[0].name.split("/", 1)[0] + "/"
     files: list[tuple[str, bytes]] = []
     for member in members:
+        rel = member.name.removeprefix(prefix)
+        if rel.startswith("/") or ".." in rel.split("/"):
+            raise BundleError(f"unsafe path in bundle: {member.name!r}")
         extracted = tar.extractfile(member)
         if extracted is None:
             continue
-        files.append((member.name.removeprefix(prefix), extracted.read()))
+        files.append((rel, extracted.read()))
     return files
 
 

@@ -39,3 +39,15 @@ def test_load_local_bundle_rejects_empty_archive(tmp_path):
         pass
     with pytest.raises(BundleError, match="empty"):
         load_local_bundle(str(path))
+
+
+def test_load_local_bundle_rejects_path_traversal(tmp_path):
+    tgz = _make_tgz(
+        tmp_path,
+        {
+            "upd/update.fuf": b"manifest",
+            "upd/../evil.bin": b"evil",
+        },
+    )
+    with pytest.raises(BundleError, match="unsafe"):
+        load_local_bundle(str(tgz))

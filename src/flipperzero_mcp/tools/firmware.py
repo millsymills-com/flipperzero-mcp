@@ -83,12 +83,13 @@ def register_firmware_tools(mcp: FastMCP) -> None:
         try:
             client = await ensure_connected(ctx)
             rpc = await get_rpc(ctx)
-            device = await client.get_device_info()
+            device = await rpc.get_device_info()
         except Exception as e:
             _classify_client_error(e)
+        device_name = device.get("hardware_name")
+        if not device_name:
+            raise ToolError("could not read device identity (hardware_name); aborting flash")
         before = classify(device)
-
-        device_name = device.get("name") or device.get("hardware_name")
         if confirm != device_name:
             raise ToolError(
                 f"confirm token {confirm!r} does not match connected device {device_name!r}"
