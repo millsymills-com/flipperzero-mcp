@@ -22,7 +22,7 @@ def _tgz_bytes():
 
 
 @pytest.mark.asyncio
-async def test_official_download_verifies_sha256(httpx_mock, tmp_path):
+async def test_official_download_verifies_sha256(httpx_mock):
     tgz = _tgz_bytes()
     sha = hashlib.sha256(tgz).hexdigest()
     directory = {
@@ -85,4 +85,56 @@ async def test_official_download_aborts_on_sha256_mismatch(httpx_mock):
     with pytest.raises(BundleError, match="sha256"):
         await download_bundle(
             FirmwareFlavor.OFFICIAL, channel="release", version="latest", target="f7"
+        )
+
+
+@pytest.mark.asyncio
+async def test_momentum_download_verifies_digest(httpx_mock):
+    tgz = _tgz_bytes()
+    sha = hashlib.sha256(tgz).hexdigest()
+    releases = [
+        {
+            "tag_name": "mntm-012",
+            "assets": [
+                {
+                    "name": "flipper-z-f7-update-mntm-012.tgz",
+                    "digest": f"sha256:{sha}",
+                    "browser_download_url": "https://gh.example/f7-update.tgz",
+                }
+            ],
+        }
+    ]
+    httpx_mock.add_response(
+        url="https://api.github.com/repos/Next-Flip/Momentum-Firmware/releases",
+        text=json.dumps(releases),
+    )
+    httpx_mock.add_response(url="https://gh.example/f7-update.tgz", content=tgz)
+    bundle = await download_bundle(
+        FirmwareFlavor.MOMENTUM, channel="release", version="latest", target="f7"
+    )
+    assert bundle.target == "f7"
+
+
+@pytest.mark.asyncio
+async def test_momentum_download_aborts_without_digest(httpx_mock):
+    tgz = _tgz_bytes()
+    releases = [
+        {
+            "tag_name": "mntm-012",
+            "assets": [
+                {
+                    "name": "flipper-z-f7-update-mntm-012.tgz",
+                    "browser_download_url": "https://gh.example/f7-update.tgz",
+                }
+            ],
+        }
+    ]
+    httpx_mock.add_response(
+        url="https://api.github.com/repos/Next-Flip/Momentum-Firmware/releases",
+        text=json.dumps(releases),
+    )
+    httpx_mock.add_response(url="https://gh.example/f7-update.tgz", content=tgz)
+    with pytest.raises(BundleError, match="digest"):
+        await download_bundle(
+            FirmwareFlavor.MOMENTUM, channel="release", version="latest", target="f7"
         )

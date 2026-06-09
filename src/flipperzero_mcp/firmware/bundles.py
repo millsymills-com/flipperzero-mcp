@@ -3,12 +3,11 @@
 from __future__ import annotations
 
 import hashlib
+import io
 import json
 import re
 import tarfile
-import tempfile
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Any
 
 import httpx
@@ -39,21 +38,24 @@ def _target_from_name(name: str) -> str:
     return match.group(1).lower()
 
 
-def _extract_members(tgz_path: str) -> list[tuple[str, bytes]]:
+def _members_from_tar(tar: tarfile.TarFile) -> list[tuple[str, bytes]]:
+    members = [m for m in tar.getmembers() if m.isfile()]
+    if not members:
+        raise BundleError("bundle archive is empty")
+    prefix = members[0].name.split("/", 1)[0] + "/"
     files: list[tuple[str, bytes]] = []
-    # extractfile reads each member into memory; nothing is written to disk.
-    with tarfile.open(tgz_path, "r:gz") as tar:
-        members = [m for m in tar.getmembers() if m.isfile()]
-        if not members:
-            raise BundleError("bundle archive is empty")
-        prefix = members[0].name.split("/", 1)[0] + "/"
-        for member in members:
-            rel = member.name.removeprefix(prefix)
-            extracted = tar.extractfile(member)
-            if extracted is None:
-                continue
-            files.append((rel, extracted.read()))
+    for member in members:
+        extracted = tar.extractfile(member)
+        if extracted is None:
+            continue
+        files.append((member.name.removeprefix(prefix), extracted.read()))
     return files
+
+
+def _build_bundle(files: list[tuple[str, bytes]], target: str) -> LocalBundle:
+    if not any(rel == _MANIFEST for rel, _ in files):
+        raise BundleError(f"bundle has no {_MANIFEST} manifest")
+    return LocalBundle(manifest_name=_MANIFEST, target=target, files=files)
 
 
 def load_local_bundle(tgz_path: str) -> LocalBundle:
@@ -70,10 +72,9 @@ def load_local_bundle(tgz_path: str) -> LocalBundle:
             no ``update.fuf`` manifest.
     """
     target = _target_from_name(tgz_path)
-    files = _extract_members(tgz_path)
-    if not any(rel == _MANIFEST for rel, _ in files):
-        raise BundleError(f"bundle has no {_MANIFEST} manifest")
-    return LocalBundle(manifest_name=_MANIFEST, target=target, files=files)
+    with tarfile.open(tgz_path, "r:gz") as tar:
+        files = _members_from_tar(tar)
+    return _build_bundle(files, target)
 
 
 _OFFICIAL_DIRECTORY = "https://update.flipperzero.one/firmware/directory.json"
@@ -98,8 +99,8 @@ def _select_official_file(
         raise BundleError(f"official version {version!r} not found in {channel!r}")
     for entry in picked.get("files", []):
         if entry.get("target") == target and entry.get("type") == "update_tgz":
-            return entry  # type: ignore[return-value]
-    raise BundleError(f"no update_tgz for target {target} in official {channel}/{version}")
+            return entry
+    raise BundleError(f"no install bundle for target {target} in official {channel}/{version}")
 
 
 async def _fetch(client: httpx.AsyncClient, url: str) -> bytes:
@@ -114,22 +115,19 @@ def _verify_sha256(data: bytes, expected: str) -> None:
         raise BundleError(f"sha256 mismatch: expected {expected}, got {actual}")
 
 
-def _bundle_from_tgz_bytes(data: bytes, source_name: str) -> LocalBundle:
-    # Write with the original filename so _target_from_name can parse the target.
-    with tempfile.TemporaryDirectory() as tmpdir:
-        tmp_path = Path(tmpdir) / source_name
-        tmp_path.write_bytes(data)
-        return load_local_bundle(str(tmp_path))
+def _bundle_from_tgz_bytes(data: bytes, target: str) -> LocalBundle:
+    with tarfile.open(fileobj=io.BytesIO(data), mode="r:gz") as tar:
+        files = _members_from_tar(tar)
+    return _build_bundle(files, target)
 
 
 async def _download_official(channel: str, version: str, target: str) -> LocalBundle:
     async with httpx.AsyncClient() as client:
         directory = json.loads(await _fetch(client, _OFFICIAL_DIRECTORY))
         entry = _select_official_file(directory, channel, version, target)
-        url = str(entry["url"])
-        data = await _fetch(client, url)
+        data = await _fetch(client, str(entry["url"]))
     _verify_sha256(data, str(entry["sha256"]))
-    return _bundle_from_tgz_bytes(data, url.rsplit("/", maxsplit=1)[-1])
+    return _bundle_from_tgz_bytes(data, target)
 
 
 async def _download_momentum(version: str, target: str) -> LocalBundle:
@@ -154,14 +152,13 @@ async def _download_momentum(version: str, target: str) -> LocalBundle:
             None,
         )
         if asset is None:
-            raise BundleError(f"no {target} update .tgz asset in Momentum {tag}")  # nosec B608 - not SQL
-        asset_name = str(asset["name"])
+            raise BundleError(f"no {target} firmware bundle in Momentum release {tag}")
         data = await _fetch(client, asset["browser_download_url"])
     digest = asset.get("digest", "")
     if not digest.startswith("sha256:"):
         raise BundleError("Momentum asset is missing a sha256 digest")
     _verify_sha256(data, digest.split(":", 1)[1])
-    return _bundle_from_tgz_bytes(data, asset_name)
+    return _bundle_from_tgz_bytes(data, target)
 
 
 async def download_bundle(
