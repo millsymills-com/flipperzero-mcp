@@ -49,14 +49,15 @@ def _decode_frames(sent: list[bytes]) -> list[flipper_pb2.Main]:
 
 @pytest.mark.asyncio
 async def test_large_write_is_chunked_with_has_next():
-    rpc = ProtobufRPC(RecordingTransport())
+    transport = RecordingTransport()
+    rpc = ProtobufRPC(transport)  # ty: ignore[invalid-argument-type]
     rpc._rpc_session_started = True  # skip CLI negotiation
     content = b"A" * 3000  # > one 1024-byte chunk
 
     ok = await rpc.storage_write("/ext/big.bin", content)
 
     assert ok is True
-    frames = _decode_frames(rpc.transport.sent)
+    frames = _decode_frames(transport.sent)
     assert len(frames) == 3  # 1024 + 1024 + 952
     assert all(f.command_id == frames[0].command_id for f in frames)
     assert [f.has_next for f in frames] == [True, True, False]
@@ -67,10 +68,24 @@ async def test_large_write_is_chunked_with_has_next():
 
 @pytest.mark.asyncio
 async def test_small_write_is_single_frame():
-    rpc = ProtobufRPC(RecordingTransport())
+    transport = RecordingTransport()
+    rpc = ProtobufRPC(transport)  # ty: ignore[invalid-argument-type]
     rpc._rpc_session_started = True
     ok = await rpc.storage_write("/ext/small.bin", b"hi")
     assert ok is True
-    frames = _decode_frames(rpc.transport.sent)
+    frames = _decode_frames(transport.sent)
     assert len(frames) == 1
     assert frames[0].has_next is False
+
+
+@pytest.mark.asyncio
+async def test_empty_write_sends_one_frame():
+    transport = RecordingTransport()
+    rpc = ProtobufRPC(transport)  # ty: ignore[invalid-argument-type]
+    rpc._rpc_session_started = True
+    ok = await rpc.storage_write("/ext/empty.bin", b"")
+    assert ok is True
+    frames = _decode_frames(transport.sent)
+    assert len(frames) == 1
+    assert frames[0].has_next is False
+    assert frames[0].storage_write_request.file.data == b""

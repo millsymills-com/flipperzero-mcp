@@ -1075,7 +1075,7 @@ class ProtobufRPC:
             logger.debug("_storage_md5sum_internal failed", exc_info=True)
         return None
 
-    _WRITE_CHUNK_SIZE = 1024  # RPC frame payload slice; validated on hardware in Phase 6.
+    _WRITE_CHUNK_SIZE = 1024  # Bytes per RPC write frame; conservative for the Flipper serial link.
 
     async def storage_write(self, path: str, content: bytes) -> bool:
         async with self._io_lock:
@@ -1104,13 +1104,12 @@ class ProtobufRPC:
                 main_request.storage_write_request.CopyFrom(req)
                 payload = main_request.SerializeToString()
                 framed = self._encode_varint(len(payload)) + payload
+                await self.transport.send(framed)
                 if is_last:
-                    await self.transport.send(framed)
-                    response = await self._receive_main_message()
+                    response = await self._receive_main_message(timeout=2.5)
                     return bool(
                         response and response.command_status == flipper_pb2.CommandStatus.OK
                     )
-                await self.transport.send(framed)
             return False
         except Exception:
             logger.debug("_storage_write_internal failed", exc_info=True)
