@@ -27,6 +27,7 @@ dependencies = [
     "protobuf==6.33.5",
     "pydantic>=2.13.3",
     "pydantic-settings>=2.14.0",
+    "httpx>=0.28.1",
 ]
 
 [project.optional-dependencies]
@@ -125,3 +126,8 @@ skips = ["B101"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/flipperzero_mcp"]
+
+[dependency-groups]
+dev = [
+    "pytest-httpx>=0.36.2",
+]

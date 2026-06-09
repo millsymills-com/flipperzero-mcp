@@ -2,9 +2,18 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import re
 import tarfile
+import tempfile
 from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
+
+import httpx
+
+from flipperzero_mcp.firmware.flavor import FirmwareFlavor
 
 _MANIFEST = "update.fuf"
 _TARGET_RE = re.compile(r"flipper-z-(f\w+)-update", re.IGNORECASE)
@@ -65,3 +74,115 @@ def load_local_bundle(tgz_path: str) -> LocalBundle:
     if not any(rel == _MANIFEST for rel, _ in files):
         raise BundleError(f"bundle has no {_MANIFEST} manifest")
     return LocalBundle(manifest_name=_MANIFEST, target=target, files=files)
+
+
+_OFFICIAL_DIRECTORY = "https://update.flipperzero.one/firmware/directory.json"
+_MOMENTUM_RELEASES = "https://api.github.com/repos/Next-Flip/Momentum-Firmware/releases"
+
+
+def _select_official_file(
+    directory: dict[str, Any], channel: str, version: str, target: str
+) -> dict[str, Any]:
+    channels = {c["id"]: c for c in directory.get("channels", [])}
+    if channel not in channels:
+        raise BundleError(f"unknown official channel {channel!r}")
+    versions = channels[channel].get("versions", [])
+    if not versions:
+        raise BundleError(f"no versions in official channel {channel!r}")
+    picked = (
+        versions[0]
+        if version == "latest"
+        else next((v for v in versions if v.get("version") == version), None)
+    )
+    if picked is None:
+        raise BundleError(f"official version {version!r} not found in {channel!r}")
+    for entry in picked.get("files", []):
+        if entry.get("target") == target and entry.get("type") == "update_tgz":
+            return entry  # type: ignore[return-value]
+    raise BundleError(f"no update_tgz for target {target} in official {channel}/{version}")
+
+
+async def _fetch(client: httpx.AsyncClient, url: str) -> bytes:
+    response = await client.get(url, follow_redirects=True, timeout=60.0)
+    response.raise_for_status()
+    return response.content
+
+
+def _verify_sha256(data: bytes, expected: str) -> None:
+    actual = hashlib.sha256(data).hexdigest()
+    if actual.lower() != expected.lower():
+        raise BundleError(f"sha256 mismatch: expected {expected}, got {actual}")
+
+
+def _bundle_from_tgz_bytes(data: bytes, source_name: str) -> LocalBundle:
+    # Write with the original filename so _target_from_name can parse the target.
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp_path = Path(tmpdir) / source_name
+        tmp_path.write_bytes(data)
+        return load_local_bundle(str(tmp_path))
+
+
+async def _download_official(channel: str, version: str, target: str) -> LocalBundle:
+    async with httpx.AsyncClient() as client:
+        directory = json.loads(await _fetch(client, _OFFICIAL_DIRECTORY))
+        entry = _select_official_file(directory, channel, version, target)
+        url = str(entry["url"])
+        data = await _fetch(client, url)
+    _verify_sha256(data, str(entry["sha256"]))
+    return _bundle_from_tgz_bytes(data, url.rsplit("/", maxsplit=1)[-1])
+
+
+async def _download_momentum(version: str, target: str) -> LocalBundle:
+    async with httpx.AsyncClient() as client:
+        releases = json.loads(await _fetch(client, _MOMENTUM_RELEASES))
+        if not releases:
+            raise BundleError("no Momentum releases found")
+        release = (
+            releases[0]
+            if version == "latest"
+            else next((r for r in releases if r.get("tag_name") == version), None)
+        )
+        if release is None:
+            raise BundleError(f"Momentum release {version!r} not found")
+        tag = release["tag_name"]
+        asset = next(
+            (
+                a
+                for a in release.get("assets", [])
+                if a["name"] == f"flipper-z-{target}-update-{tag}.tgz"
+            ),
+            None,
+        )
+        if asset is None:
+            raise BundleError(f"no {target} update .tgz asset in Momentum {tag}")  # nosec B608 - not SQL
+        asset_name = str(asset["name"])
+        data = await _fetch(client, asset["browser_download_url"])
+    digest = asset.get("digest", "")
+    if not digest.startswith("sha256:"):
+        raise BundleError("Momentum asset is missing a sha256 digest")
+    _verify_sha256(data, digest.split(":", 1)[1])
+    return _bundle_from_tgz_bytes(data, asset_name)
+
+
+async def download_bundle(
+    flavor: FirmwareFlavor, *, channel: str, version: str, target: str
+) -> LocalBundle:
+    """Download and verify an update bundle for ``flavor``.
+
+    Args:
+        flavor: OFFICIAL or MOMENTUM (others are local-path only).
+        channel: Official channel id (ignored for Momentum).
+        version: ``latest`` or an exact version/tag.
+        target: Hardware target such as ``f7``.
+
+    Returns:
+        A verified LocalBundle.
+
+    Raises:
+        BundleError: On unsupported flavor, missing file, or sha256 mismatch.
+    """
+    if flavor is FirmwareFlavor.OFFICIAL:
+        return await _download_official(channel, version, target)
+    if flavor is FirmwareFlavor.MOMENTUM:
+        return await _download_momentum(version, target)
+    raise BundleError(f"auto-download unsupported for {flavor.value}; supply a local .tgz path")
