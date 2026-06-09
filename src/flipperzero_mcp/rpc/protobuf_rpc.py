@@ -15,7 +15,11 @@ import os
 import time
 from typing import TYPE_CHECKING, Any
 
+from flipperzero_mcp.errors import FlipperProtocolError, FlipperTimeoutError
+
 if TYPE_CHECKING:
+    from collections.abc import AsyncIterator
+
     from flipperzero_mcp.transport.base import FlipperTransport
 
 logger = logging.getLogger(__name__)
@@ -686,19 +690,17 @@ class ProtobufRPC:
 
         Returns a list of names (files/dirs). If the device streams results using has_next,
         we collect all frames.
+
+        Raises:
+            FlipperTimeoutError: If a streamed listing is truncated (a continuation
+                frame never arrives). A truncated listing is never silently
+                returned as an empty or partial directory.
+            FlipperProtocolError: If the device reports a non-OK status.
         """
-        names: list[str] = []
         async with self._io_lock:
-            try:
-                return await asyncio.wait_for(
-                    self._storage_list_internal(
-                        path, include_md5=include_md5, filter_max_size=filter_max_size
-                    ),
-                    timeout=3.0,
-                )
-            except Exception:
-                logger.debug("storage_list(%s) timed out or failed", path, exc_info=True)
-                return names
+            return await self._storage_list_internal(
+                path, include_md5=include_md5, filter_max_size=filter_max_size
+            )
 
     async def storage_list_detailed(
         self, path: str, include_md5: bool = False, filter_max_size: int = 0
@@ -711,108 +713,96 @@ class ProtobufRPC:
         - type: "FILE" | "DIR"
         - size: uint32 size (0 for dirs on most firmwares)
         - md5sum: optional md5 (only when include_md5=True and device provides it)
+
+        Raises:
+            FlipperTimeoutError: If a streamed listing is truncated (a continuation
+                frame never arrives). A truncated listing is never silently
+                returned as an empty or partial directory.
+            FlipperProtocolError: If the device reports a non-OK status.
         """
-        entries: list[dict[str, Any]] = []
         async with self._io_lock:
-            try:
-                return await asyncio.wait_for(
-                    self._storage_list_detailed_internal(
-                        path, include_md5=include_md5, filter_max_size=filter_max_size
-                    ),
-                    timeout=3.0,
+            return await self._storage_list_detailed_internal(
+                path, include_md5=include_md5, filter_max_size=filter_max_size
+            )
+
+    async def _storage_list_frames(
+        self, path: str, include_md5: bool, filter_max_size: int
+    ) -> AsyncIterator[Any]:
+        """Yield each storage_list response frame for ``path`` in order.
+
+        Drives the streamed ``has_next`` protocol to completion and raises rather
+        than silently truncating: a missing continuation frame or a non-OK status
+        is surfaced, so callers can distinguish a genuinely empty directory from a
+        listing that failed partway.
+
+        Raises:
+            FlipperTimeoutError: A continuation frame did not arrive.
+            FlipperProtocolError: The device reported a non-OK status, or the
+                stream exceeded the frame ceiling.
+        """
+        main_request = flipper_pb2.Main()
+        main_request.command_id = self._get_next_command_id()
+        main_request.has_next = False
+
+        req = storage_pb2.ListRequest()
+        req.path = path
+        req.include_md5 = include_md5
+        if filter_max_size:
+            req.filter_max_size = int(filter_max_size)
+        main_request.storage_list_request.CopyFrom(req)
+
+        response = await self._send_rpc_message(main_request)
+        if not response:
+            raise FlipperTimeoutError(f"storage_list({path}): no response from device")
+        if response.command_status != flipper_pb2.CommandStatus.OK:
+            raise FlipperProtocolError(
+                f"storage_list({path}): device returned status {response.command_status}"
+            )
+        yield response
+
+        max_iterations = 100
+        iteration = 0
+        while response.has_next:
+            iteration += 1
+            if iteration > max_iterations:
+                raise FlipperProtocolError(
+                    f"storage_list({path}): exceeded {max_iterations} continuation frames"
                 )
-            except Exception:
-                logger.debug("storage_list_detailed(%s) timed out or failed", path, exc_info=True)
-                return entries
+            response = await self._receive_main_message(timeout=2.5)
+            if not response:
+                raise FlipperTimeoutError(
+                    f"storage_list({path}): truncated; a continuation frame never arrived"
+                )
+            if response.command_status != flipper_pb2.CommandStatus.OK:
+                raise FlipperProtocolError(
+                    f"storage_list({path}): status {response.command_status} mid-stream"
+                )
+            yield response
 
     async def _storage_list_internal(
         self, path: str, include_md5: bool = False, filter_max_size: int = 0
     ) -> list[str]:
         names: list[str] = []
-        try:
-            main_request = flipper_pb2.Main()
-            main_request.command_id = self._get_next_command_id()
-            main_request.has_next = False
-
-            req = storage_pb2.ListRequest()
-            req.path = path
-            req.include_md5 = include_md5
-            if filter_max_size:
-                req.filter_max_size = int(filter_max_size)
-            main_request.storage_list_request.CopyFrom(req)
-
-            main_response = await self._send_rpc_message(main_request)
-            if not main_response or main_response.command_status != flipper_pb2.CommandStatus.OK:
-                return names
-
-            def collect(resp: Any) -> None:
-                if resp.HasField("storage_list_response"):
-                    names.extend(f.name for f in resp.storage_list_response.file if f.name)
-
-            collect(main_response)
-
-            max_iterations = 100
-            iteration = 0
-            while main_response.has_next and iteration < max_iterations:
-                iteration += 1
-                next_response = await self._receive_main_message(timeout=2.5)
-                if not next_response:
-                    break
-                main_response = next_response
-                if main_response.command_status != flipper_pb2.CommandStatus.OK:
-                    break
-                collect(main_response)
-
-        except Exception:
-            logger.debug("_storage_list_internal failed", exc_info=True)
+        async for resp in self._storage_list_frames(path, include_md5, filter_max_size):
+            if resp.HasField("storage_list_response"):
+                names.extend(f.name for f in resp.storage_list_response.file if f.name)
         return names
 
     async def _storage_list_detailed_internal(
         self, path: str, include_md5: bool = False, filter_max_size: int = 0
     ) -> list[dict[str, Any]]:
         entries: list[dict[str, Any]] = []
-        try:
-            main_request = flipper_pb2.Main()
-            main_request.command_id = self._get_next_command_id()
-            main_request.has_next = False
-
-            req = storage_pb2.ListRequest()
-            req.path = path
-            req.include_md5 = include_md5
-            if filter_max_size:
-                req.filter_max_size = int(filter_max_size)
-            main_request.storage_list_request.CopyFrom(req)
-
-            main_response = await self._send_rpc_message(main_request)
-            if not main_response or main_response.command_status != flipper_pb2.CommandStatus.OK:
-                return entries
-
-            def collect(resp: Any) -> None:
-                if resp.HasField("storage_list_response"):
-                    for f in resp.storage_list_response.file:
-                        if not f.name:
-                            continue
-                        ftype = "DIR" if f.type == storage_pb2.File.DIR else "FILE"
-                        item: dict[str, Any] = {"name": f.name, "type": ftype, "size": int(f.size)}
-                        if include_md5 and getattr(f, "md5sum", ""):
-                            item["md5sum"] = f.md5sum
-                        entries.append(item)
-
-            collect(main_response)
-
-            max_iterations = 100
-            iteration = 0
-            while main_response.has_next and iteration < max_iterations:
-                iteration += 1
-                next_response = await self._receive_main_message(timeout=2.5)
-                if not next_response:
-                    break
-                main_response = next_response
-                if main_response.command_status != flipper_pb2.CommandStatus.OK:
-                    break
-                collect(main_response)
-        except Exception:
-            logger.debug("_storage_list_detailed_internal failed", exc_info=True)
+        async for resp in self._storage_list_frames(path, include_md5, filter_max_size):
+            if not resp.HasField("storage_list_response"):
+                continue
+            for f in resp.storage_list_response.file:
+                if not f.name:
+                    continue
+                ftype = "DIR" if f.type == storage_pb2.File.DIR else "FILE"
+                item: dict[str, Any] = {"name": f.name, "type": ftype, "size": int(f.size)}
+                if include_md5 and getattr(f, "md5sum", ""):
+                    item["md5sum"] = f.md5sum
+                entries.append(item)
         return entries
 
     async def storage_read(self, path: str) -> bytes:
