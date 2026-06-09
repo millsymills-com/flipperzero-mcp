@@ -49,3 +49,46 @@ def register_prompts(mcp: FastMCP) -> None:
             "4. See `flipper://reference/connection` for transport and mode details.\n"
             "5. Remember: `flipperzero_cli_exec` is USB-only."
         )
+
+    @mcp.prompt
+    def flipper_doctor() -> str:
+        """Run a full diagnostic sweep over the connected Flipper (the /flipper-doctor command)."""
+        return (
+            "Diagnose the Flipper end to end and report a verdict for each check:\n"
+            "1. Transport + RPC: `flipperzero_connection_health` with `probe_rpc=true`. "
+            "On failure, follow the `troubleshoot_connection` prompt.\n"
+            "2. Device + firmware: `flipperzero_system_info` — record name, hardware, "
+            "firmware channel/version, and `sd_card_available`.\n"
+            "3. Protobuf compatibility: `flipperzero_system_protobuf_version`.\n"
+            '4. CLI shell (USB only): `flipperzero_cli_exec "help"` to confirm the text '
+            "console responds; expect it to fail over WiFi (see `flipper://reference/cli`).\n"
+            "5. TX/destructive gate: report whether `FLIPPER_ENABLE_TX_TOOLS` is enabled; "
+            "do not run gated commands here.\n"
+            "Summarize as pass/warn/fail per check with the next action for any non-pass."
+        )
+
+    @mcp.prompt
+    def flipper_install(github_url: str) -> str:
+        """Build and install a Flipper app from a GitHub repo (the /flipper-install command)."""
+        return (
+            f"Install the Flipper app at {github_url}. Follow "
+            "`flipper://workflow/install-app` and fail loud rather than ship an "
+            "incompatible `.fap`:\n"
+            "1. Preflight: `flipperzero_system_info` — confirm USB link, read the firmware "
+            "channel/version, and check `sd_card_available`. Confirm "
+            "`FLIPPER_ENABLE_WRITE_TOOLS=true` (steps 5-6 are gated on it); STOP before "
+            "cloning or building if it is off rather than fail at the push.\n"
+            f"2. Clone {github_url} on the host and locate the ufbt app "
+            "(`application.fam`).\n"
+            "3. Pick the ufbt SDK matching the device firmware channel/version. "
+            "If the repo targets a different channel or custom firmware, STOP and report — "
+            "do not push a mismatched build.\n"
+            "4. Build the `.fap` with ufbt against that SDK; abort on any build error.\n"
+            "5. `flipperzero_fs_mkdir` for `/ext/apps/<Category>` if absent, then "
+            "`flipperzero_fs_push` the `.fap` (it verifies the device MD5 and raises on "
+            "mismatch).\n"
+            "6. Confirm placement with `flipperzero_fs_list` for that directory.\n"
+            '7. Launch: `flipperzero_cli_exec "loader open <AppName>"`; stop with '
+            "`loader close`.\n"
+            "8. Report channel/version, built `.fap`, push verification, and launch result."
+        )
