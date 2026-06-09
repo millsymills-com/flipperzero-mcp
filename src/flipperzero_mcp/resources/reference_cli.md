@@ -42,6 +42,7 @@ Connect over USB; the MCP `flipperzero_cli_exec` tool runs one command at a time
 - `subghz decode raw <path>`
 - `subghz chat <freq> <device>` (streaming)
 - Bands: 299.9–348, 387–464, 779–928 MHz. device 0 = internal, 1 = external.
+- Region default: US (FCC ISM, 902–928 MHz). Examples assume this band; the server enforces no region. Confirm local regulations before transmitting.
 
 ## NFC / RFID / iButton / IR
 - `nfc scanner` / `nfc field` / `nfc emulate f <path>` / `nfc apdu d <data>`
