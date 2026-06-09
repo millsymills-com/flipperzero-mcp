@@ -432,6 +432,44 @@ class ProtobufRPC:
             logger.debug("_system_protobuf_version_internal failed", exc_info=True)
         return None
 
+    async def system_update(self, manifest_path: str) -> int:
+        """Validate an update bundle manifest on the device.
+
+        Args:
+            manifest_path: Absolute device path to ``update.fuf``.
+
+        Returns:
+            The ``UpdateResponse.UpdateResultCode`` integer (``0`` == OK).
+        """
+        async with self._io_lock:
+            try:
+                main_request = flipper_pb2.Main()
+                main_request.command_id = self._get_next_command_id()
+                main_request.has_next = False
+                req = system_pb2.UpdateRequest()
+                req.update_manifest = manifest_path
+                main_request.system_update_request.CopyFrom(req)
+                response = await self._send_rpc_message(main_request)
+                if response and response.HasField("system_update_response"):
+                    return int(response.system_update_response.code)
+                return int(system_pb2.UpdateResponse.UnspecifiedError)
+            except Exception:
+                logger.debug("system_update failed", exc_info=True)
+                return int(system_pb2.UpdateResponse.UnspecifiedError)
+
+    async def system_reboot_update(self) -> None:
+        """Reboot the device into UPDATE mode (fire-and-forget; no response)."""
+        async with self._io_lock:
+            await self._ensure_rpc_session_started()
+            main_request = flipper_pb2.Main()
+            main_request.command_id = self._get_next_command_id()
+            main_request.has_next = False
+            req = system_pb2.RebootRequest()
+            req.mode = system_pb2.RebootRequest.UPDATE
+            main_request.system_reboot_request.CopyFrom(req)
+            payload = main_request.SerializeToString()
+            await self.transport.send(self._encode_varint(len(payload)) + payload)
+
     async def system_datetime(self) -> dict[str, int] | None:
         """Return the device date/time fields reported by firmware."""
         async with self._io_lock:
