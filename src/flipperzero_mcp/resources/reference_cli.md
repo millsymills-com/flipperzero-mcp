@@ -1,6 +1,9 @@
 # Flipper Zero CLI Reference
 
-Baseline firmware: official 1.x. The CLI surface can change across firmware releases — re-validate after firmware updates.
+Baseline firmware: Momentum `mntm-012` (the firmware this command list was
+captured on). Official firmware exposes a subset of these commands; a small
+number of commands listed here are Momentum-only. The CLI surface can also
+change across firmware releases — re-validate after firmware updates.
 
 Connect over USB; the MCP `flipperzero_cli_exec` tool runs one command at a time in CLI text mode and returns output up to the `>:` prompt. Streaming commands (`subghz rx`, `ir rx`, `log`, `input dump`, `subghz chat`) never return to the prompt and will time out with partial output — they are not usable via `flipperzero_cli_exec` in this release.
 

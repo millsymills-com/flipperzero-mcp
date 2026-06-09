@@ -65,6 +65,7 @@ The server reads `FLIPPER_*` environment variables (or a local `.env`). See
 | `FLIPPER_WIFI_PORT` | `8080` | Dev board TCP port. |
 | `FLIPPER_ENABLE_WRITE_TOOLS` | `false` | Server-side gate for device-mutating storage writes (`fs_push`, `fs_mkdir`). Off blocks them. |
 | `FLIPPER_ENABLE_TX_TOOLS` | `false` | Server-side gate for transmit/destructive CLI commands. Off blocks them regardless of the per-call flag. |
+| `FLIPPER_ENABLE_FIRMWARE_FLASH` | `false` | Server-side gate for `flipperzero_firmware_install`. Requires `FLIPPER_ENABLE_WRITE_TOOLS=true` as well. |
 | `FLIPPER_DEBUG` | `false` | Enable verbose debug logging. |
 | `FLIPPER_FORCE_START_RPC_SESSION` | `false` | Advanced/debug: force `start_rpc_session` even when probing suggests RPC mode is already active. |
 
@@ -92,6 +93,7 @@ falls back to WiFi when `FLIPPER_WIFI_HOST` is set.
 | `flipperzero_fs_pull` | Download a device file to the host and verify integrity against the device MD5. |
 | `flipperzero_app_start` | Start a Flipper application via RPC; gated behind `FLIPPER_ENABLE_WRITE_TOOLS`. |
 | `flipperzero_cli_exec` | Run one Flipper CLI command and return its output, completion flag, and risk classification. |
+| `flipperzero_firmware_install` | Flash a firmware bundle to the device via USB. Destructive; gated by `FLIPPER_ENABLE_FIRMWARE_FLASH=true` + `FLIPPER_ENABLE_WRITE_TOOLS=true` + a `confirm` token matching the device name. |
 
 CLI exec is USB-only; transmit/destructive commands require both
 `FLIPPER_ENABLE_TX_TOOLS=true` on the server and `i_accept_responsibility=true`
@@ -149,17 +151,42 @@ local-only. See `CLAUDE.md` for project conventions and `CONTRIBUTING.md`.
 
 ## Firmware
 
-**Baseline.** Validated against Momentum `mntm-012` (Flipper Zero, protobuf RPC
-0.25, build 2025-12-31) — the firmware the golden test fixtures (`tests/golden/`)
-were captured on. The protobuf runtime is pinned to `protobuf==6.33.5` (see
-`CLAUDE.md`). The RPC surface is stable across firmware exposing protobuf RPC
-0.x, but CLI text output and command names can drift between firmware versions;
-re-validate and re-record fixtures (`make record-fixtures`) after a firmware bump.
+**Supported firmware.** The server supports both **Official** firmware (channels
+`release`, `release-candidate`, `development`; tested on 1.4.x) and **Momentum**
+(`mntm-012`). The protobuf RPC layer is firmware-agnostic. The golden test
+fixtures (`tests/golden/`) were captured on Momentum `mntm-012` (protobuf RPC
+0.25, build 2025-12-31). CLI text output and command availability can differ
+between firmware flavors — re-validate and re-record fixtures
+(`make record-fixtures`) after a firmware change.
 
-**ESP32 WiFi bridge.** WiFi transport requires an ESP32 WiFi Dev Board running the TCP↔UART bridge
-firmware shipped in `firmware/tcp_uart_bridge/`. See that directory's `README.md`
-for ESP-IDF build/flash instructions and `docs/wifi_dev_board.md` for the
-end-to-end setup guide. The firmware is harvested as-is and is not built in CI.
+The protobuf runtime is pinned to `protobuf==6.33.5` (see `CLAUDE.md`).
+`flipperzero_system_info` returns a `firmware` block: `{flavor, version,
+origin_fork, origin_git, target}`.
+
+**Flashing firmware (`flipperzero_firmware_install`).** The tool pushes a
+firmware bundle to `/ext/update/<pkg>/` on the device and reboots into the
+on-device updater. The source is either a local `.tgz` path or `{flavor,
+channel, version}` for auto-download (downloads Official from
+`update.flipperzero.one` or Momentum from GitHub releases).
+
+- **Integrity.** Bundles are verified by sha256 before transfer — Official via
+  the per-file `sha256` in `directory.json`; Momentum via the GitHub release
+  asset digest. This is integrity verification over HTTPS, not GPG-signed
+  provenance.
+- **USB-only.** Flashing requires USB. The device reboots into the on-device
+  updater; the WiFi bridge cannot survive that reboot.
+- **Gating.** Requires `FLIPPER_ENABLE_WRITE_TOOLS=true` AND
+  `FLIPPER_ENABLE_FIRMWARE_FLASH=true` (both default-off), plus a `confirm`
+  argument that must equal the connected device's name.
+- **Recovery.** If flashing fails, the device enters DFU mode. Use
+  [qFlipper](https://flipperzero.one/update) to recover. Momentum has no
+  automatic OTA fallback.
+
+**ESP32 WiFi bridge.** WiFi transport requires an ESP32 WiFi Dev Board running
+the TCP↔UART bridge firmware shipped in `firmware/tcp_uart_bridge/`. See that
+directory's `README.md` for ESP-IDF build/flash instructions and
+`docs/wifi_dev_board.md` for the end-to-end setup guide. The firmware is
+harvested as-is and is not built in CI.
 
 ## Attribution
 
