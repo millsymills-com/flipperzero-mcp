@@ -142,8 +142,9 @@ async def install_bundle(rpc: _RPCLike, bundle: _BundleLike, *, pkg_name: str) -
         if not await _probe_session(rpc):
             raise FlashError(
                 f"device RPC session stopped responding after writing {dest}; the "
-                "update was not applied - power-cycle the Flipper (or enter DFU and "
-                "recover with qFlipper) before retrying"
+                "update was not applied - reconnect to re-establish the session and "
+                "retry (a transport reconnect clears the wedge; power-cycle only if "
+                "it persists)"
             )
 
     manifest = f"{pkg_dir}/{bundle.manifest_name}"
