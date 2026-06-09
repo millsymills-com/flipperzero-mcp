@@ -44,9 +44,9 @@ def test_auto_transport_without_wifi_host_allowed():
 
 
 def test_firmware_flash_disabled_by_default():
-    assert FlipperConfig(_env_file=None).enable_firmware_flash is False
+    assert FlipperConfig(_env_file=None).enable_firmware_flash is False  # ty: ignore[unknown-argument]
 
 
 def test_firmware_flash_enabled_via_env(monkeypatch):
     monkeypatch.setenv("FLIPPER_ENABLE_FIRMWARE_FLASH", "true")
-    assert FlipperConfig(_env_file=None).enable_firmware_flash is True
+    assert FlipperConfig(_env_file=None).enable_firmware_flash is True  # ty: ignore[unknown-argument]

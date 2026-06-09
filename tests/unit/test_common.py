@@ -77,14 +77,14 @@ async def test_ensure_connected_reconnects_when_is_connected_raises(exc):
 
 
 def test_require_firmware_flash_raises_when_flash_disabled():
-    cfg = FlipperConfig(_env_file=None, enable_write_tools=True, enable_firmware_flash=False)
+    cfg = FlipperConfig(_env_file=None, enable_write_tools=True, enable_firmware_flash=False)  # ty: ignore[unknown-argument]
     ctx = FakeCtx(FakeContextWithConfig(cfg))
     with pytest.raises(ToolError, match="FLIPPER_ENABLE_FIRMWARE_FLASH"):
-        _common.require_firmware_flash(ctx)
+        _common.require_firmware_flash(ctx)  # ty: ignore[invalid-argument-type]
 
 
 def test_require_firmware_flash_raises_when_write_tools_disabled():
-    cfg = FlipperConfig(_env_file=None, enable_write_tools=False, enable_firmware_flash=False)
+    cfg = FlipperConfig(_env_file=None, enable_write_tools=False, enable_firmware_flash=False)  # ty: ignore[unknown-argument]
     ctx = FakeCtx(FakeContextWithConfig(cfg))
     with pytest.raises(ToolError):
-        _common.require_firmware_flash(ctx)
+        _common.require_firmware_flash(ctx)  # ty: ignore[invalid-argument-type]
