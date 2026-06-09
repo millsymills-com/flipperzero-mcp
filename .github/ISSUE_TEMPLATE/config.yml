@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/millsymills-com/flipperzero-mcp/security/policy
+    about: Do not file public issues for security reports. Use the private disclosure path in SECURITY.md.

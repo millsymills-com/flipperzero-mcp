@@ -19,6 +19,14 @@ uv run pre-commit install
 Integration tests are local-only; they require a connected Flipper and, for the
 WiFi tier, `FLIPPER_WIFI_HOST` pointing at a running bridge.
 
+### Golden fixtures
+
+CLI/RPC behaviors are pinned by replayed byte fixtures captured from a real
+Flipper (`tests/golden/`, see `docs/agents/golden-fixtures.md`). The default
+suite replays them offline. If you change wire shapes, the `.proto` sources, or
+the CLI/RPC logic and a `tests/golden/` test fails, re-capture on hardware with
+`make record-fixtures` and commit the updated fixtures.
+
 ## Code style
 
 - `uv run ruff format` formats; `uv run ruff check` lints.

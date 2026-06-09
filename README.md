@@ -97,6 +97,26 @@ CLI exec is USB-only; transmit/destructive commands require both
 `FLIPPER_ENABLE_TX_TOOLS=true` on the server and `i_accept_responsibility=true`
 on the call.
 
+## Scope & limitations
+
+- **CLI is USB-only.** `flipperzero_cli_exec` needs the Flipper text CLI shell,
+  which only the USB CDC link carries. Over the WiFi bridge (protobuf-only) it
+  returns a clear "CLI text mode unavailable over WiFi bridge" error.
+- **No streaming/interactive commands.** Commands that never return to the `>:`
+  prompt (e.g. `subghz rx`, `ir rx`, `log`) time out with `completed=false` and
+  partial output. Commands that expect interactive input are unsupported.
+- **Transmit/destructive commands are double-gated.** Both `FLIPPER_ENABLE_TX_TOOLS=true`
+  (operator, server-side) and `i_accept_responsibility=true` (per call) are
+  required; either missing refuses the command. The risk classifier is an
+  advisory ordered-prefix list that fails open — the env flag is the real
+  boundary. Radio transmission is subject to local regulations; you are
+  responsible for legal use.
+- **Device writes are gated.** Storage/app mutations need `FLIPPER_ENABLE_WRITE_TOOLS=true`,
+  default-off.
+- **Distribution is git-clone + `uv`.** No PyPI package at this stage.
+- **WiFi needs the ESP32 bridge** running the harvested TCP↔UART firmware; that
+  firmware is not built in CI.
+
 ## Resources & prompts
 
 Bundled MCP resources:
@@ -129,7 +149,14 @@ local-only. See `CLAUDE.md` for project conventions and `CONTRIBUTING.md`.
 
 ## Firmware
 
-WiFi transport requires an ESP32 WiFi Dev Board running the TCP↔UART bridge
+**Baseline.** Validated against Momentum `mntm-012` (Flipper Zero, protobuf RPC
+0.25, build 2025-12-31) — the firmware the golden test fixtures (`tests/golden/`)
+were captured on. The protobuf runtime is pinned to `protobuf==6.33.5` (see
+`CLAUDE.md`). The RPC surface is stable across firmware exposing protobuf RPC
+0.x, but CLI text output and command names can drift between firmware versions;
+re-validate and re-record fixtures (`make record-fixtures`) after a firmware bump.
+
+**ESP32 WiFi bridge.** WiFi transport requires an ESP32 WiFi Dev Board running the TCP↔UART bridge
 firmware shipped in `firmware/tcp_uart_bridge/`. See that directory's `README.md`
 for ESP-IDF build/flash instructions and `docs/wifi_dev_board.md` for the
 end-to-end setup guide. The firmware is harvested as-is and is not built in CI.
