@@ -40,7 +40,7 @@ class FakeRPC:
 
 @pytest.mark.asyncio
 async def test_firmware_install_blocked_without_flag():
-    server = create_server(FlipperConfig(_env_file=None, enable_write_tools=True))
+    server = create_server(FlipperConfig(_env_file=None, enable_write_tools=True))  # ty: ignore[unknown-argument]
     async with Client(server) as client:
         with pytest.raises(ToolError, match="FLIPPER_ENABLE_FIRMWARE_FLASH"):
             await client.call_tool(
@@ -54,7 +54,7 @@ async def test_firmware_install_rejects_wrong_confirm_token(monkeypatch):
     monkeypatch.setattr("flipperzero_mcp.server.get_transport", lambda _t, _c: FakeTransport())
     monkeypatch.setattr("flipperzero_mcp.rpc.client.ProtobufRPC", FakeRPC)
     server = create_server(
-        FlipperConfig(_env_file=None, enable_write_tools=True, enable_firmware_flash=True)
+        FlipperConfig(_env_file=None, enable_write_tools=True, enable_firmware_flash=True)  # ty: ignore[unknown-argument]
     )
     async with Client(server) as client:
         with pytest.raises(ToolError, match="confirm"):

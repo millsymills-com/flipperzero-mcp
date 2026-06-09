@@ -41,8 +41,8 @@ class FakeRPC:
     async def storage_md5sum(self, path):
         return hashlib.md5(self.store[path], usedforsecurity=False).hexdigest()
 
-    async def system_update(self, manifest):
-        self.calls.append(f"update:{manifest}")
+    async def system_update(self, manifest_path):
+        self.calls.append(f"update:{manifest_path}")
         return self._update_code
 
     async def system_reboot_update(self):

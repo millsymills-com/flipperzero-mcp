@@ -41,8 +41,8 @@ async def _reconnect_and_classify(client: Any) -> Any:
         if await client.connect():
             try:
                 return classify(await client.get_device_info())
-            except Exception:  # noqa: S112  # nosec B112 - device still settling; keep polling
-                continue
+            except (OSError, RuntimeError, ValueError):
+                continue  # device still settling; keep polling
     raise ToolError(
         "device did not reconnect after the update; it may still be applying or "
         "may have dropped to DFU - recover with qFlipper if it does not return"
