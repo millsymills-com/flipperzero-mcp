@@ -8,8 +8,8 @@ import pytest
 from flipperzero_mcp.errors import FlipperTimeoutError
 from flipperzero_mcp.firmware.installer import (
     FlashError,
-    _probe_session,
-    _verify_md5,
+    _check_md5,
+    _push_file,
     install_bundle,
 )
 from flipperzero_mcp.rpc.protobuf_gen import system_pb2
@@ -38,23 +38,23 @@ class _Md5RPC:
 
 
 @pytest.mark.asyncio
-async def test_verify_md5_retries_while_digest_unreadable():
+async def test_check_md5_matches_after_digest_becomes_readable():
     rpc = _Md5RPC([None, None, "abc"])
-    assert await _verify_md5(rpc, "/ext/x", "abc", settle_s=0.0) is True
+    assert await _check_md5(rpc, "/ext/x", "abc", settle_s=0.0) == "match"
     assert rpc.calls == 3
 
 
 @pytest.mark.asyncio
-async def test_verify_md5_fails_immediately_on_definitive_mismatch():
+async def test_check_md5_reports_mismatch_immediately():
     rpc = _Md5RPC(["deadbeef", "abc"])
-    assert await _verify_md5(rpc, "/ext/x", "abc", settle_s=0.0) is False
+    assert await _check_md5(rpc, "/ext/x", "abc", settle_s=0.0) == "mismatch"
     assert rpc.calls == 1  # did not retry past a non-None mismatch
 
 
 @pytest.mark.asyncio
-async def test_verify_md5_gives_up_if_digest_never_readable():
+async def test_check_md5_reports_unreadable_when_digest_never_returns():
     rpc = _Md5RPC([None, None, None, None, None])
-    assert await _verify_md5(rpc, "/ext/x", "abc", settle_s=0.0) is False
+    assert await _check_md5(rpc, "/ext/x", "abc", settle_s=0.0) == "unreadable"
     assert rpc.calls == 5
 
 
@@ -89,10 +89,6 @@ class FakeRPC:
 
     async def storage_md5sum(self, path):
         return hashlib.md5(self.store[path], usedforsecurity=False).hexdigest()
-
-    async def ping(self):
-        self.calls.append("ping")
-        return b"ping"
 
     async def system_update(self, manifest_path):
         self.calls.append(f"update:{manifest_path}")
@@ -149,30 +145,92 @@ async def test_install_wraps_link_drop_during_update_as_flash_error():
 
 
 @pytest.mark.asyncio
-async def test_install_aborts_when_session_wedges_after_write():
-    class WedgeRPC(FakeRPC):
-        async def ping(self):
-            return None  # session unresponsive after the write
-
-    rpc = WedgeRPC()
+async def test_install_aborts_when_session_wedges_with_no_resync():
+    # A wedged session leaves the post-write digest unreadable; with no resync
+    # hook there is no recovery, so the flash must fail closed before reboot.
+    rpc = _WedgeRPC()
     with pytest.raises(FlashError, match="stopped responding"):
         await install_bundle(rpc, FakeBundle(), pkg_name="upd-test")
     assert rpc.rebooted is False
 
 
+class _WedgeRPC(FakeRPC):
+    """FakeRPC modelling a wedged session: the digest reads unreadable.
+
+    ``store`` is shared across instances to model a single SD card surviving
+    reconnects, so a file written on a wedged session verifies on a fresh one.
+    """
+
+    def __init__(self, *, alive=False, store=None):
+        super().__init__()
+        self.alive = alive
+        if store is not None:
+            self.store = store
+
+    async def storage_md5sum(self, path):
+        if not self.alive:
+            return None  # wedged: digest unreadable until the session is re-synced
+        return await super().storage_md5sum(path)
+
+
 @pytest.mark.asyncio
-async def test_probe_session_false_when_ping_raises():
-    class WedgeRPC:
-        async def ping(self):
-            raise FlipperTimeoutError("no response to ping")
+async def test_push_file_recovers_by_verifying_after_resync():
+    shared: dict[str, bytes] = {}
+    wedged = _WedgeRPC(store=shared)
+    healthy = _WedgeRPC(alive=True, store=shared)
 
-    assert await _probe_session(WedgeRPC(), settle_s=0.0) is False
+    async def resync():
+        return healthy
+
+    out = await _push_file(wedged, "/ext/update/x/f.bin", b"payload", resync=resync)
+    assert out is healthy
+    # The data was written once on the wedged session and verified after the
+    # reconnect; it was not rewritten on the healthy session.
+    assert "write:/ext/update/x/f.bin" in wedged.calls
+    assert "write:/ext/update/x/f.bin" not in healthy.calls
 
 
 @pytest.mark.asyncio
-async def test_probe_session_true_when_ping_answers():
-    class HealthyRPC:
-        async def ping(self):
-            return b"ping"
+async def test_push_file_fails_closed_when_resync_never_recovers():
+    shared: dict[str, bytes] = {}
 
-    assert await _probe_session(HealthyRPC(), settle_s=0.0) is True
+    async def resync():
+        return _WedgeRPC(store=shared)  # every fresh session is still wedged
+
+    with pytest.raises(FlashError, match="stopped responding"):
+        await _push_file(_WedgeRPC(store=shared), "/ext/update/x/f.bin", b"x", resync=resync)
+
+
+@pytest.mark.asyncio
+async def test_push_file_fails_on_persistent_md5_mismatch():
+    # A wedged session can return a garbage (non-None, wrong) digest, so a single
+    # mismatch is not trusted - it is re-verified after a reconnect. A mismatch
+    # that survives every reconnect is a real corrupt transfer and fails closed.
+    class BadMd5RPC(FakeRPC):
+        async def storage_md5sum(self, path):  # noqa: ARG002
+            return "deadbeef"  # never the expected digest, even on a fresh session
+
+    resyncs = 0
+
+    async def resync():
+        nonlocal resyncs
+        resyncs += 1
+        return BadMd5RPC()
+
+    with pytest.raises(FlashError, match="md5 mismatch"):
+        await _push_file(BadMd5RPC(), "/ext/update/x/f.bin", b"payload", resync=resync)
+    assert resyncs == 2  # exhausted the reconnect retries before declaring mismatch
+
+
+@pytest.mark.asyncio
+async def test_install_resyncs_and_resumes_after_wedge():
+    shared: dict[str, bytes] = {}
+    wedged = _WedgeRPC(store=shared)  # first session wedges (digest unreadable)
+    healthy = _WedgeRPC(alive=True, store=shared)  # reconnect lands a live session
+
+    async def resync():
+        return healthy
+
+    await install_bundle(wedged, FakeBundle(), pkg_name="upd-test", resync=resync)
+    assert healthy.rebooted is True
+    assert wedged.rebooted is False

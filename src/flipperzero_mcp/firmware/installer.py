@@ -5,7 +5,8 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import logging
-from typing import Any, Protocol
+from collections.abc import Awaitable, Callable
+from typing import Any, Literal, Protocol
 
 from flipperzero_mcp.errors import FlipperTimeoutError
 from flipperzero_mcp.firmware.codes import update_code_message
@@ -17,9 +18,12 @@ _UPDATE_ROOT = "/ext/update"
 # to SD; retry across this many attempts with a settle delay before trusting it.
 _MD5_ATTEMPTS = 5
 _MD5_SETTLE_S = 2.0
-# Aggressive back-to-back multi-MB writes can wedge the RPC session; pace each
-# file with a short settle and probe the session before continuing.
-_INTER_FILE_SETTLE_S = 0.5
+# A multi-MB storage_write transfers the data but can wedge the RPC session, so
+# the post-write digest reads back unreadable. The wedge clears on a transport
+# reconnect; reconnect and re-verify (without rewriting) this many times.
+_RESYNC_ATTEMPTS = 2
+
+_Md5Status = Literal["match", "mismatch", "unreadable"]
 
 
 class FlashError(RuntimeError):
@@ -31,13 +35,8 @@ class _RPCLike(Protocol):
     async def storage_mkdir(self, path: str) -> bool: ...
     async def storage_write(self, path: str, content: bytes) -> bool: ...
     async def storage_md5sum(self, path: str) -> str | None: ...
-    async def ping(self) -> bytes | None: ...
     async def system_update(self, manifest_path: str) -> int: ...
     async def system_reboot_update(self) -> None: ...
-
-
-class _SessionProbe(Protocol):
-    async def ping(self) -> bytes | None: ...
 
 
 class _BundleLike(Protocol):
@@ -50,15 +49,17 @@ class _Md5Reader(Protocol):
     async def storage_md5sum(self, path: str) -> str | None: ...
 
 
-async def _verify_md5(
-    rpc: _Md5Reader, path: str, expected: str, *, settle_s: float = _MD5_SETTLE_S
-) -> bool:
-    """Confirm the device-side md5 matches, retrying while the digest is unreadable.
+_Resync = Callable[[], Awaitable["_RPCLike"]]
 
-    ``storage_md5sum`` returns ``None`` when the device is still flushing a large
-    write to SD, so a ``None`` is treated as "not ready yet" and retried after a
-    settle delay. A non-``None`` digest that differs is a definitive mismatch and
-    fails immediately.
+
+async def _check_md5(
+    rpc: _Md5Reader, path: str, expected: str, *, settle_s: float = _MD5_SETTLE_S
+) -> _Md5Status:
+    """Classify the device-side md5 against ``expected``.
+
+    ``storage_md5sum`` returns ``None`` while the device is still flushing a
+    large write to SD, so a ``None`` is treated as "not ready yet" and retried
+    after a settle delay.
 
     Args:
         rpc: Live RPC client.
@@ -67,48 +68,91 @@ async def _verify_md5(
         settle_s: Delay between retries (0 in tests for determinism).
 
     Returns:
-        True if the device digest matches; False on a definitive mismatch or if
-        the digest stays unreadable across all attempts.
+        ``"match"`` if the digest equals ``expected``, ``"mismatch"`` for a
+        definitive non-equal digest (corrupt transfer or wrong data), or
+        ``"unreadable"`` if it stays ``None`` across all attempts.
     """
     for attempt in range(_MD5_ATTEMPTS):
         device_md5 = await rpc.storage_md5sum(path)
         if device_md5 == expected:
-            return True
+            return "match"
         if device_md5 is not None:
-            return False
+            return "mismatch"
         if attempt + 1 < _MD5_ATTEMPTS:
             await asyncio.sleep(settle_s)
-    return False
+    return "unreadable"
 
 
-async def _probe_session(rpc: _SessionProbe, *, settle_s: float = _INTER_FILE_SETTLE_S) -> bool:
-    """Pace the writes and confirm the RPC session still responds.
+async def _push_file(
+    rpc: _RPCLike, dest: str, data: bytes, *, resync: _Resync | None
+) -> _RPCLike:
+    """Write one file and confirm its on-device md5, recovering a wedged session.
 
-    A short settle gives the device time to flush, then a cheap ``ping``
-    detects a wedged session before the reboot step, so a stalled flash fails
-    closed with a recovery hint instead of leaving a half-written update.
+    A multi-MB ``storage_write`` transfers the data correctly but can wedge the
+    RPC session, after which ``storage_md5sum`` reads back ``None`` or a garbage
+    digest. The wedge clears on a transport reconnect, after which the
+    already-written data verifies, so a non-matching digest is treated as
+    untrusted: ``resync`` and re-verify on the fresh session *without* rewriting
+    (a fresh write would just re-wedge). Only a digest that keeps disagreeing
+    after a clean reconnect is a real mismatch.
 
     Args:
         rpc: Live RPC client.
-        settle_s: Delay before probing (0 in tests for determinism).
+        dest: Device path to write.
+        data: File contents.
+        resync: Reconnect callback returning a fresh RPC client, or ``None`` to
+            fail closed without recovery.
 
     Returns:
-        True if the session answered the ping; False if it is unresponsive.
+        The live RPC client, which ``resync`` may have replaced.
+
+    Raises:
+        FlashError: If the digest never matches after the allotted reconnect
+            retries (a persistent mismatch points at a corrupt transfer; a
+            persistent unreadable digest points at an unrecoverable wedge).
     """
-    await asyncio.sleep(settle_s)
-    try:
-        return await rpc.ping() is not None
-    except (OSError, RuntimeError, FlipperTimeoutError):
-        return False
+    expected = hashlib.md5(data, usedforsecurity=False).hexdigest()
+    status: _Md5Status = "unreadable"
+    for attempt in range(_RESYNC_ATTEMPTS + 1):
+        try:
+            await rpc.storage_write(dest, data)
+            status = await _check_md5(rpc, dest, expected)
+        except (OSError, RuntimeError, FlipperTimeoutError):
+            status = "unreadable"  # link wedged mid-write; verify after reconnect
+        if status == "match":
+            return rpc
+        if resync is None or attempt == _RESYNC_ATTEMPTS:
+            break
+        rpc = await resync()
+        try:
+            status = await _check_md5(rpc, dest, expected)
+        except (OSError, RuntimeError, FlipperTimeoutError):
+            status = "unreadable"
+        if status == "match":
+            return rpc  # data landed; only the stale session was wedged
+    if status == "mismatch":
+        raise FlashError(
+            f"md5 mismatch after writing {dest}; the on-device data does not match "
+            "the bundle even after reconnecting - corrupt transfer, flash aborted"
+        )
+    raise FlashError(
+        f"device RPC session stopped responding after writing {dest}; the update was "
+        "not applied - reconnect to re-establish the session and retry (a transport "
+        "reconnect clears the wedge; power-cycle only if it persists)"
+    )
 
 
-async def install_bundle(rpc: _RPCLike, bundle: _BundleLike, *, pkg_name: str) -> None:
+async def install_bundle(
+    rpc: _RPCLike, bundle: _BundleLike, *, pkg_name: str, resync: _Resync | None = None
+) -> None:
     """Push ``bundle`` to ``/ext/update/<pkg_name>`` and reboot into the updater.
 
     Args:
         rpc: Live RPC client.
         bundle: Resolved local bundle (manifest + files + target).
         pkg_name: Update subfolder name on the device.
+        resync: Reconnect callback returning a fresh RPC client, used to recover
+            a session wedged by a large write. ``None`` fails closed instead.
 
     Raises:
         FlashError: On target mismatch, push/verify failure, or a non-OK update
@@ -134,18 +178,7 @@ async def install_bundle(rpc: _RPCLike, bundle: _BundleLike, *, pkg_name: str) -
         parent = dest.rsplit("/", 1)[0]
         if parent != pkg_dir:
             await rpc.storage_mkdir(parent)
-        if not await rpc.storage_write(dest, data):
-            raise FlashError(f"failed to write {dest}")
-        expected_md5 = hashlib.md5(data, usedforsecurity=False).hexdigest()
-        if not await _verify_md5(rpc, dest, expected_md5):
-            raise FlashError(f"md5 mismatch after writing {dest}")
-        if not await _probe_session(rpc):
-            raise FlashError(
-                f"device RPC session stopped responding after writing {dest}; the "
-                "update was not applied - reconnect to re-establish the session and "
-                "retry (a transport reconnect clears the wedge; power-cycle only if "
-                "it persists)"
-            )
+        rpc = await _push_file(rpc, dest, data, resync=resync)
 
     manifest = f"{pkg_dir}/{bundle.manifest_name}"
     try:

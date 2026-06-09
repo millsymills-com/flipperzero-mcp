@@ -71,6 +71,24 @@ async def _reconnect_and_classify(client: Any, before: Any) -> tuple[Any, bool]:
     )
 
 
+async def _resync_session(client: Any) -> Any:
+    """Reconnect the transport to clear a wedged RPC session.
+
+    Large multi-MB writes can wedge the device's RPC session; a transport
+    teardown + reconnect re-establishes a fresh session that responds again.
+
+    Returns:
+        The fresh RPC client after a successful reconnect.
+
+    Raises:
+        FlashError: If the device cannot be reconnected.
+    """
+    await client.disconnect()
+    if not await client.connect() or client.rpc is None:
+        raise FlashError("could not re-establish the device session after a session wedge")
+    return client.rpc
+
+
 def register_firmware_tools(mcp: FastMCP) -> None:
     """Register the firmware-flash tool."""
 
@@ -124,7 +142,9 @@ def register_firmware_tools(mcp: FastMCP) -> None:
 
         try:
             bundle = await _resolve(source, before.target)
-            await install_bundle(rpc, bundle, pkg_name=_PKG_NAME)
+            await install_bundle(
+                rpc, bundle, pkg_name=_PKG_NAME, resync=lambda: _resync_session(client)
+            )
         except (BundleError, FlashError) as e:
             raise ToolError(str(e)) from e
 
