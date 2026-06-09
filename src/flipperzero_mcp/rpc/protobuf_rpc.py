@@ -1117,7 +1117,10 @@ class ProtobufRPC:
 
     async def storage_write(self, path: str, content: bytes) -> bool:
         async with self._io_lock:
-            timeout = max(3.0, len(content) / 65536.0)
+            # Effective write+flush throughput over USB CDC is ~80 KB/s; a small
+            # write right after a large one can take ~10 s to ack while the SD
+            # flushes, so budget a 15 s floor plus a conservative per-byte term.
+            timeout = max(15.0, len(content) / 40000.0)
             try:
                 return await asyncio.wait_for(
                     self._storage_write_internal(path, content), timeout=timeout
