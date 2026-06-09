@@ -10,6 +10,7 @@ from flipperzero_mcp.firmware.installer import (
     FlashError,
     _check_md5,
     _push_file,
+    _trigger_update,
     install_bundle,
 )
 from flipperzero_mcp.rpc.protobuf_gen import system_pb2
@@ -234,3 +235,72 @@ async def test_install_resyncs_and_resumes_after_wedge():
     await install_bundle(wedged, FakeBundle(), pkg_name="upd-test", resync=resync)
     assert healthy.rebooted is True
     assert wedged.rebooted is False
+
+
+class _UpdateCodeRPC(FakeRPC):
+    """Returns a scripted sequence of system_update codes."""
+
+    def __init__(self, codes):
+        super().__init__()
+        self._codes = list(codes)
+
+    async def system_update(self, manifest_path):  # noqa: ARG002
+        return self._codes.pop(0)
+
+
+@pytest.mark.asyncio
+async def test_trigger_update_returns_on_ok():
+    rpc = _UpdateCodeRPC([system_pb2.UpdateResponse.OK])
+    assert await _trigger_update(rpc, "/m.fuf", resync=None) is rpc
+
+
+@pytest.mark.asyncio
+async def test_trigger_update_retries_transient_unspecified_then_succeeds():
+    first = _UpdateCodeRPC([system_pb2.UpdateResponse.UnspecifiedError])
+    healthy = _UpdateCodeRPC([system_pb2.UpdateResponse.OK])
+    resyncs = 0
+
+    async def resync():
+        nonlocal resyncs
+        resyncs += 1
+        return healthy
+
+    out = await _trigger_update(first, "/m.fuf", resync=resync)
+    assert out is healthy
+    assert resyncs == 1
+
+
+@pytest.mark.asyncio
+async def test_trigger_update_fails_on_persistent_unspecified():
+    rpc = _UpdateCodeRPC([system_pb2.UpdateResponse.UnspecifiedError] * 3)
+
+    async def resync():
+        return rpc
+
+    with pytest.raises(FlashError, match="unspecified update error"):
+        await _trigger_update(rpc, "/m.fuf", resync=resync)
+
+
+@pytest.mark.asyncio
+async def test_trigger_update_fails_immediately_on_specific_code():
+    resyncs = 0
+
+    async def resync():
+        nonlocal resyncs
+        resyncs += 1
+        return rpc
+
+    rpc = _UpdateCodeRPC([system_pb2.UpdateResponse.ManifestInvalid])
+    with pytest.raises(FlashError, match="manifest"):
+        await _trigger_update(rpc, "/m.fuf", resync=resync)
+    assert resyncs == 0  # a definitive rejection is not retried
+
+
+@pytest.mark.asyncio
+async def test_trigger_update_wraps_link_drop():
+    class LinkDropRPC(FakeRPC):
+        async def system_update(self, manifest_path):  # noqa: ARG002
+            raise FlipperTimeoutError("no response to system_update")
+
+    with pytest.raises(FlashError, match="link dropped"):
+        await _trigger_update(LinkDropRPC(), "/m.fuf", resync=None)

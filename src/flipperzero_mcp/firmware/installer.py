@@ -10,6 +10,7 @@ from typing import Any, Literal, Protocol
 
 from flipperzero_mcp.errors import FlipperTimeoutError
 from flipperzero_mcp.firmware.codes import update_code_message
+from flipperzero_mcp.rpc.protobuf_gen import system_pb2
 
 logger = logging.getLogger(__name__)
 
@@ -22,6 +23,10 @@ _MD5_SETTLE_S = 2.0
 # the post-write digest reads back unreadable. The wedge clears on a transport
 # reconnect; reconnect and re-verify (without rewriting) this many times.
 _RESYNC_ATTEMPTS = 2
+# system_update issued right after the final large write can return a transient
+# UnspecifiedError while the device is still settling; settle this long before
+# (re)trying the update trigger.
+_UPDATE_SETTLE_S = 3.0
 
 _Md5Status = Literal["match", "mismatch", "unreadable"]
 
@@ -142,6 +147,43 @@ async def _push_file(
     )
 
 
+async def _trigger_update(rpc: _RPCLike, manifest: str, *, resync: _Resync | None) -> _RPCLike:
+    """Stage the update via ``system_update``, retrying a transient error.
+
+    Issued right after the final large write, ``system_update`` can return
+    ``UnspecifiedError`` while the device is still settling - a short settle and
+    a clean session clear it (the CLI ``update install`` succeeds the same way).
+    A specific code (target/manifest/integrity mismatch) is a real rejection and
+    fails immediately.
+
+    Args:
+        rpc: Live RPC client.
+        manifest: Device path to the staged ``update.fuf``.
+        resync: Reconnect callback for a fresh session between retries, or
+            ``None`` to retry on the same session.
+
+    Returns:
+        The live RPC client to reboot with.
+
+    Raises:
+        FlashError: On a definitive rejection, a dropped link, or an
+            ``UnspecifiedError`` that persists across retries.
+    """
+    for attempt in range(_RESYNC_ATTEMPTS + 1):
+        await asyncio.sleep(_UPDATE_SETTLE_S)
+        try:
+            code = await rpc.system_update(manifest)
+        except FlipperTimeoutError as e:
+            raise FlashError(f"device link dropped during update validation: {e}") from e
+        if code == system_pb2.UpdateResponse.OK:
+            return rpc
+        if code != system_pb2.UpdateResponse.UnspecifiedError or attempt == _RESYNC_ATTEMPTS:
+            raise FlashError(f"device rejected update: {update_code_message(code)}")
+        if resync is not None:
+            rpc = await resync()
+    raise FlashError("device rejected update: unspecified update error (persisted after retries)")
+
+
 async def install_bundle(
     rpc: _RPCLike, bundle: _BundleLike, *, pkg_name: str, resync: _Resync | None = None
 ) -> None:
@@ -181,12 +223,5 @@ async def install_bundle(
         rpc = await _push_file(rpc, dest, data, resync=resync)
 
     manifest = f"{pkg_dir}/{bundle.manifest_name}"
-    try:
-        code = await rpc.system_update(manifest)
-    except FlipperTimeoutError as e:
-        raise FlashError(f"device link dropped during update validation: {e}") from e
-    message = update_code_message(code)
-    if message is not None:
-        raise FlashError(f"device rejected update: {message}")
-
+    rpc = await _trigger_update(rpc, manifest, resync=resync)
     await rpc.system_reboot_update()
