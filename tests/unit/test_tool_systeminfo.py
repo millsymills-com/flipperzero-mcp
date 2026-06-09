@@ -105,6 +105,28 @@ async def test_system_datetime_returns_device_fields(monkeypatch):
         assert result.data["datetime"]["second"] == 56
 
 
+async def test_systeminfo_surfaces_firmware_block(monkeypatch):
+    class MomentumRPC(FakeRPC):
+        async def get_device_info(self):
+            return {
+                "hardware_name": "Lun10n",
+                "hardware_target": "7",
+                "firmware_version": "mntm-012",
+                "firmware_origin_fork": "Momentum",
+                "firmware_origin_git": "https://github.com/Next-Flip/Momentum-Firmware",
+            }
+
+    monkeypatch.setattr("flipperzero_mcp.server.get_transport", lambda _t, _c: FakeTransport())
+    monkeypatch.setattr("flipperzero_mcp.rpc.client.ProtobufRPC", MomentumRPC)
+    server = create_server(FlipperConfig(_env_file=None))
+    async with Client(server) as client:
+        result = await client.call_tool("flipperzero_system_info", {})
+        fw = result.data["firmware"]
+        assert fw["flavor"] == "momentum"
+        assert fw["version"] == "mntm-012"
+        assert fw["target"] == "f7"
+
+
 async def test_systeminfo_surfaces_error_when_unreachable(monkeypatch):
     class DeadTransport:
         def get_name(self):

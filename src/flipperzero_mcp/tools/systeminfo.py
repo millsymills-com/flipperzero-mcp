@@ -9,6 +9,7 @@ from fastmcp.exceptions import ToolError
 from mcp.types import ToolAnnotations
 
 from flipperzero_mcp.errors import _classify_client_error
+from flipperzero_mcp.firmware.flavor import classify
 from flipperzero_mcp.tools._common import ensure_connected, get_rpc
 
 
@@ -33,6 +34,7 @@ def register_systeminfo_tools(mcp: FastMCP) -> None:
             client = await ensure_connected(ctx)
             health = await client.get_connection_health(probe_rpc=True)
             device = await client.get_device_info()
+            firmware = classify(device)
             sd = await client.check_sd_card_available()
         except Exception as e:
             _classify_client_error(e)
@@ -41,6 +43,13 @@ def register_systeminfo_tools(mcp: FastMCP) -> None:
             "transport": health["transport"]["type"],
             "rpc_responsive": health["rpc_responsive"],
             "device": device,
+            "firmware": {
+                "flavor": firmware.flavor.value,
+                "version": firmware.version,
+                "origin_fork": firmware.origin_fork,
+                "origin_git": firmware.origin_git,
+                "target": firmware.target,
+            },
             "sd_card_available": sd,
         }
 

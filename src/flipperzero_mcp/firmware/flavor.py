@@ -78,9 +78,10 @@ def classify(device_info: dict[str, str]) -> FirmwareInfo:
     """
     origin_fork = device_info.get("firmware_origin_fork")
     origin_git = device_info.get("firmware_origin_git")
+    version = device_info.get("firmware_version") or device_info.get("firmware")
     return FirmwareInfo(
         flavor=_flavor_from(origin_git, origin_fork),
-        version=device_info.get("firmware_version"),
+        version=version if version and version != "Unknown" else None,
         origin_fork=origin_fork,
         origin_git=origin_git,
         target=_target_from(device_info.get("hardware_target")),
