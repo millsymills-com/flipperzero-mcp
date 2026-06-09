@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "name": "fs_push_integrity",
+  "description": "storage_write + storage_md5sum: the fs_push integrity round-trip.",
+  "meta": {
+    "supports_cli_text_mode": true,
+    "transport": "usb",
+    "firmware": "mntm-012",
+    "dest_path": "/ext/.golden_fixture_probe.bin",
+    "local_content_b64": "ZmxpcHBlcnplcm8tbWNwIGdvbGRlbiBmaXh0dXJlIHByb2JlCg=="
+  },
+  "session_pre_started": true,
+  "events": [
+    {
+      "dir": "tx",
+      "b64": "TQgBWkkKHi9leHQvLmdvbGRlbl9maXh0dXJlX3Byb2JlLmJpbhInIiVmbGlwcGVyemVyby1tY3AgZ29sZGVuIGZpeHR1cmUgcHJvYmUK"
+    },
+    {
+      "dir": "rx",
+      "b64": "BAgBIgA="
+    },
+    {
+      "dir": "tx",
+      "b64": "JAgCciAKHi9leHQvLmdvbGRlbl9maXh0dXJlX3Byb2JlLmJpbg=="
+    },
+    {
+      "dir": "rx",
+      "b64": "JggCeiIKIDUxZmFkNTU0NDA1YWFhMTUyMGVmZGI1OGI3NWQ5MDQ3"
+    },
+    {
+      "dir": "tx",
+      "b64": "JAgDYiAKHi9leHQvLmdvbGRlbl9maXh0dXJlX3Byb2JlLmJpbg=="
+    },
+    {
+      "dir": "rx",
+      "b64": "BAgDIgA="
+    }
+  ],
+  "expect": {
+    "dest_path": "/ext/.golden_fixture_probe.bin",
+    "bytes": 37,
+    "md5": "51fad554405aaa1520efdb58b75d9047",
+    "device_md5": "51fad554405aaa1520efdb58b75d9047",
+    "verified": true
+  }
+}
