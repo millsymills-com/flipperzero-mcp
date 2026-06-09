@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "name": "wifi_cli_rejection",
+  "description": "CLI text mode is unavailable over the WiFi bridge: cli_exec must refuse before any wire I/O via the supports_cli_text_mode capability.",
+  "meta": {
+    "transport": "wifi",
+    "supports_cli_text_mode": false
+  },
+  "session_pre_started": true,
+  "events": [],
+  "expect": {
+    "raises": "FlipperCLIUnavailableError",
+    "message_contains": "WiFi"
+  }
+}

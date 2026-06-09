@@ -1,0 +1,43 @@
+{
+  "schema_version": 1,
+  "name": "cli_exec_device_info",
+  "description": "cli_exec('device_info'): echo+prompt stripping, benign risk, completed.",
+  "meta": {
+    "supports_cli_text_mode": true,
+    "transport": "usb",
+    "firmware": "mntm-012"
+  },
+  "session_pre_started": true,
+  "events": [
+    {
+      "dir": "tx",
+      "b64": "A5oBAA=="
+    },
+    {
+      "dir": "rx",
+      "b64": "AiIA"
+    },
+    {
+      "dir": "tx",
+      "b64": "Aw0="
+    },
+    {
+      "dir": "rx",
+      "b64": "DQo+OiANCj46IA=="
+    },
+    {
+      "dir": "tx",
+      "b64": "ZGV2aWNlX2luZm8N"
+    },
+    {
+      "dir": "rx",
+      "b64": "ZGV2aWNlX2luZm8NCmRldmljZV9pbmZvX21ham9yICAgICAgICAgICAgIDogMg0KZGV2aWNlX2luZm9fbWlub3IgICAgICAgICAgICAgOiA0DQpoYXJkd2FyZV9tb2RlbCAgICAgICAgICAgICAgICA6IEZsaXBwZXIgWmVybw0KaGFyZHdhcmVfdWlkICAgICAgICAgICAgICAgICAgOiAzMjg4MDEwMTI2RTE4MDAwDQpoYXJkd2FyZV9vdHBfdmVyICAgICAgICAgICAgICA6IDINCmhhcmR3YXJlX3RpbWVzdGFtcCAgICAgICAgICAgIDogMTY0NDgxMDg2Nw0KaGFyZHdhcmVfdmVyICAgICAgICAgICAgICAgICAgOiAxMg0KaGFyZHdhcmVfdGFyZ2V0ICAgICAgICAgICAgICAgOiA3DQpoYXJkd2FyZV9ib2R5ICAgICAgICAgICAgICAgICA6IDkNCmhhcmR3YXJlX2Nvbm5lY3QgICAgICAgICAgICAgIDogNg0KaGFyZHdhcmVfZGlzcGxheSAgICAgICAgICAgICAgOiAxDQpoYXJkd2FyZV9jb2xvciAgICAgICAgICAgICAgICA6IDINCmhhcmR3YXJlX3JlZ2lvbiAgICAgICAgICAgICAgIDogMg0KaGFyZHdhcmVfcmVnaW9uX3Byb3Zpc2lvbmVkICAgOiBVUw0KaGFyZHdhcmVfbmFtZSAgICAgICAgICAgICAgICAgOiBMdW4xMG4NCmZpcm13YXJlX2NvbW1pdCAgICAgICAgICAgICAgIDogZTE3ODRlNzQNCmZpcm13YXJlX2NvbW1pdF9kaXJ0eSAgICAgICAgIDogZmFsc2UNCmZpcm13YXJlX2JyYW5jaCAgICAgICAgICAgICAgIDogbW50bS0wMTINCmZpcm13YXJlX2JyYW5jaF9udW0gICAgICAgICAgIDogMA0KZmlybXdhcmVfdmVyc2lvbiAgICAgICAgICAgICAgOiBtbnRtLTAxMg0KZmlybXdhcmVfYnVpbGRfZGF0ZSAgICAgICAgICAgOiAzMS0xMi0yMDI1DQpmaXJtd2FyZV90YXJnZXQgICAgICAgICAgICAgICA6IDcNCmZpcm13YXJlX2FwaV9tYWpvciAgICAgICAgICAgIDogODcNCmZpcm13YXJlX2FwaV9taW5vciAgICAgICAgICAgIDogMQ0KZmlybXdhcmVfb3JpZ2luX2ZvcmsgICAgICAgICAgOiBNb21lbnR1bQ0KZmlybXdhcmVfb3JpZ2luX2dpdCAgICAgICAgICAgOiBodHRwczovL2dpdGh1Yi5jb20vTmV4dC1GbGlwL01vbWVudHVtLUZpcm13YXJlDQpyYWRpb19hbGl2ZSAgICAgICAgICAgICAgICAgICA6IHRydWUNCnJhZGlvX21vZGUgICAgICAgICAgICAgICAgICAgIDogU3RhY2sNCnJhZGlvX2Z1c19tYWpvciAgICAgICAgICAgICAgIDogMQ0KcmFkaW9fZnVzX21pbm9yICAgICAgICAgICAgICAgOiAyDQpyYWRpb19mdXNfc3ViICAgICAgICAgICAgICAgICA6IDANCnJhZGlvX2Z1c19zcmFtMmIgICAgICAgICAgICAgIDogMTZLDQpyYWRpb19mdXNfc3JhbTJhICAgICAgICAgICAgICA6IDBLDQpyYWRpb19mdXNfZmxhc2ggICAgICAgICAgICAgICA6IDI0Sw0KcmFkaW9fc3RhY2tfdHlwZSAgICAgICAgICAgICAgOiAzDQpyYWRpb19zdGFja19tYWpvciAgICAgICAgICAgICA6IDENCnJhZGlvX3N0YWNrX21pbm9yICAgICAgICAgICAgIDogMjANCnJhZGlvX3N0YWNrX3N1YiAgICAgICAgICAgICAgIDogMA0KcmFkaW9fc3RhY2tfYnJhbmNoICAgICAgICAgICAgOiAwDQpyYWRpb19zdGFja19yZWxlYXNlICAgICAgICAgICA6IDINCnJhZGlvX3N0YWNrX3NyYW0yYiAgICAgICAgICAgIDogMTlLDQpyYWRpb19zdGFja19zcmFtMmEgICAgICAgICAgICA6IDE0Sw0KcmFkaW9fc3RhY2tfc3JhbTEgICAgICAgICAgICAgOiAwSw0KcmFkaW9fc3RhY2tfZmxhc2ggICAgICAgICAgICAgOiAxMTZLDQpyYWRpb19ibGVfbWFjICAgICAgICAgICAgICAgICA6IDMyODgwMTI2RTE4MA0KZW5jbGF2ZV92YWxpZF9rZXlzICAgICAgICAgICAgOiAxMA0KZW5jbGF2ZV92YWxpZCAgICAgICAgICAgICAgICAgOiB0cnVlDQpzeXN0ZW1fZGVidWcgICAgICAgICAgICAgICAgICA6IDANCnN5c3RlbV9sb2NrICAgICAgICAgICAgICAgICAgIDogMA0Kc3lzdGVtX29yaWVudCAgICAgICAgICAgICAgICAgOiAwDQpzeXN0ZW1fc2xlZXBfbGVnYWN5ICAgICAgICAgICA6IDANCnN5c3RlbV9zdGVhbHRoICAgICAgICAgICAgICAgIDogMA0Kc3lzdGVtX2hlYXBfdHJhY2sgICAgICAgICAgICAgOiAwDQpzeXN0ZW1fYm9vdCAgICAgICAgICAgICAgICAgICA6IDANCnN5c3RlbV9sb2NhbGVfdGltZSAgICAgICAgICAgIDogMA0Kc3lzdGVtX2xvY2FsZV9kYXRlICAgICAgICAgICAgOiAwDQpzeXN0ZW1fbG9jYWxlX3VuaXQgICAgICAgICAgICA6IDANCnN5c3RlbV9sb2dfbGV2ZWwgICAgICAgICAgICAgIDogMA0KcHJvdG9idWZfdmVyc2lvbl9tYWpvciAgICAgICAgOiAwDQpwcm90b2J1Zl92ZXJzaW9uX21pbm9yICAgICAgICA6IDI1DQoNCj46IA=="
+    }
+  ],
+  "expect": {
+    "output": "device_info_major             : 2\ndevice_info_minor             : 4\nhardware_model                : Flipper Zero\nhardware_uid                  : 3288010126E18000\nhardware_otp_ver              : 2\nhardware_timestamp            : 1644810867\nhardware_ver                  : 12\nhardware_target               : 7\nhardware_body                 : 9\nhardware_connect              : 6\nhardware_display              : 1\nhardware_color                : 2\nhardware_region               : 2\nhardware_region_provisioned   : US\nhardware_name                 : Lun10n\nfirmware_commit               : e1784e74\nfirmware_commit_dirty         : false\nfirmware_branch               : mntm-012\nfirmware_branch_num           : 0\nfirmware_version              : mntm-012\nfirmware_build_date           : 31-12-2025\nfirmware_target               : 7\nfirmware_api_major            : 87\nfirmware_api_minor            : 1\nfirmware_origin_fork          : Momentum\nfirmware_origin_git           : https://github.com/Next-Flip/Momentum-Firmware\nradio_alive                   : true\nradio_mode                    : Stack\nradio_fus_major               : 1\nradio_fus_minor               : 2\nradio_fus_sub                 : 0\nradio_fus_sram2b              : 16K\nradio_fus_sram2a              : 0K\nradio_fus_flash               : 24K\nradio_stack_type              : 3\nradio_stack_major             : 1\nradio_stack_minor             : 20\nradio_stack_sub               : 0\nradio_stack_branch            : 0\nradio_stack_release           : 2\nradio_stack_sram2b            : 19K\nradio_stack_sram2a            : 14K\nradio_stack_sram1             : 0K\nradio_stack_flash             : 116K\nradio_ble_mac                 : 32880126E180\nenclave_valid_keys            : 10\nenclave_valid                 : true\nsystem_debug                  : 0\nsystem_lock                   : 0\nsystem_orient                 : 0\nsystem_sleep_legacy           : 0\nsystem_stealth                : 0\nsystem_heap_track             : 0\nsystem_boot                   : 0\nsystem_locale_time            : 0\nsystem_locale_date            : 0\nsystem_locale_unit            : 0\nsystem_log_level              : 0\nprotobuf_version_major        : 0\nprotobuf_version_minor        : 25",
+    "completed": true,
+    "risk": "benign",
+    "warning": null
+  }
+}

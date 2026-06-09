@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "name": "cli_tx_gate_disabled",
+  "description": "A transmit command is refused before any wire I/O when the operator env gate (FLIPPER_ENABLE_TX_TOOLS) is off, even with i_accept_responsibility.",
+  "meta": {
+    "transport": "usb",
+    "supports_cli_text_mode": true
+  },
+  "session_pre_started": true,
+  "events": [],
+  "expect": {
+    "command": "subghz tx 0x00 433920000 200 10",
+    "accept_responsibility": true,
+    "tx_tools_enabled": false,
+    "raises": "FlipperCLIRefusedError"
+  }
+}
