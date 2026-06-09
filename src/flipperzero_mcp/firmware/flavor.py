@@ -18,7 +18,15 @@ class FirmwareFlavor(enum.Enum):
 
 @dataclass(frozen=True)
 class FirmwareInfo:
-    """Classified firmware facts derived from device_info."""
+    """Classified firmware facts derived from device_info.
+
+    Attributes:
+        flavor: The recognized firmware distribution, or ``UNKNOWN``.
+        version: The firmware version string, if reported.
+        origin_fork: Short fork name as reported by the device (e.g. ``Momentum``).
+        origin_git: Upstream git URL the firmware was built from.
+        target: Hardware target identifier (e.g. ``f7``), if reported.
+    """
 
     flavor: FirmwareFlavor
     version: str | None
@@ -30,15 +38,15 @@ class FirmwareInfo:
 _GIT_MARKERS = (
     ("next-flip/momentum", FirmwareFlavor.MOMENTUM),
     ("darkflippers/unleashed", FirmwareFlavor.UNLEASHED),
-    ("roguemaster", FirmwareFlavor.ROGUEMASTER),
+    ("roguemaster/", FirmwareFlavor.ROGUEMASTER),
     ("flipperdevices/flipperzero-firmware", FirmwareFlavor.OFFICIAL),
 )
-_FORK_MARKERS = (
-    ("momentum", FirmwareFlavor.MOMENTUM),
-    ("unleashed", FirmwareFlavor.UNLEASHED),
-    ("roguemaster", FirmwareFlavor.ROGUEMASTER),
-    ("official", FirmwareFlavor.OFFICIAL),
-)
+_FORK_MARKERS = {
+    "momentum": FirmwareFlavor.MOMENTUM,
+    "unleashed": FirmwareFlavor.UNLEASHED,
+    "roguemaster": FirmwareFlavor.ROGUEMASTER,
+    "official": FirmwareFlavor.OFFICIAL,
+}
 
 
 def _flavor_from(origin_git: str | None, origin_fork: str | None) -> FirmwareFlavor:
@@ -46,10 +54,9 @@ def _flavor_from(origin_git: str | None, origin_fork: str | None) -> FirmwareFla
     for marker, flavor in _GIT_MARKERS:
         if marker in git:
             return flavor
-    fork = (origin_fork or "").lower()
-    for marker, flavor in _FORK_MARKERS:
-        if marker in fork:
-            return flavor
+    fork = (origin_fork or "").strip().lower()
+    if fork in _FORK_MARKERS:
+        return _FORK_MARKERS[fork]
     return FirmwareFlavor.UNKNOWN
 
 

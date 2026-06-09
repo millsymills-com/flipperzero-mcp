@@ -55,3 +55,18 @@ def test_classify_falls_back_to_fork_field_when_git_missing():
 def test_classify_reports_version():
     info = classify({"firmware_version": "1.4.3"})
     assert info.version == "1.4.3"
+
+
+def test_git_origin_takes_priority_over_fork():
+    info = classify(
+        {
+            "firmware_origin_git": "https://github.com/DarkFlippers/unleashed-firmware",
+            "firmware_origin_fork": "Momentum",
+        }
+    )
+    assert info.flavor is FirmwareFlavor.UNLEASHED
+
+
+def test_unofficial_fork_is_not_official():
+    info = classify({"firmware_origin_fork": "Unofficial"})
+    assert info.flavor is FirmwareFlavor.UNKNOWN
