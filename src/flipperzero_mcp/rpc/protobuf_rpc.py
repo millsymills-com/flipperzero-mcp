@@ -1108,6 +1108,12 @@ class ProtobufRPC:
         return None
 
     _WRITE_CHUNK_SIZE = 1024  # Bytes per RPC write frame; conservative for the Flipper serial link.
+    # The device reassembles has_next fragments and acks only the final one, so
+    # an unpaced multi-MB write floods USB CDC (~1.5 MB/s) far faster than the
+    # device drains to SD (~80 KB/s). The overrun wedges the RPC input path mid
+    # write and leaves stale bytes that break the next start_rpc_session. Pace
+    # fragment sends to the device's sustainable throughput to apply backpressure.
+    _WRITE_THROUGHPUT_BYTES_S = 80_000
 
     async def storage_write(self, path: str, content: bytes) -> bool:
         async with self._io_lock:
@@ -1145,6 +1151,9 @@ class ProtobufRPC:
                     return bool(
                         response and response.command_status == flipper_pb2.CommandStatus.OK
                     )
+                # Backpressure: hold the host to the device's drain rate so the
+                # unacked fragment stream does not overrun and wedge the session.
+                await asyncio.sleep(len(framed) / self._WRITE_THROUGHPUT_BYTES_S)
             return False
         except Exception:
             logger.debug("_storage_write_internal failed", exc_info=True)

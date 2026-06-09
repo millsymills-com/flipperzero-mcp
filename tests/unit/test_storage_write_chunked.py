@@ -67,6 +67,44 @@ async def test_large_write_is_chunked_with_has_next():
 
 
 @pytest.mark.asyncio
+async def test_large_write_paces_fragments_to_device_throughput(monkeypatch):
+    slept: list[float] = []
+
+    async def _record(seconds):
+        slept.append(seconds)
+
+    monkeypatch.setattr("flipperzero_mcp.rpc.protobuf_rpc.asyncio.sleep", _record)
+    transport = RecordingTransport()
+    rpc = ProtobufRPC(transport)  # ty: ignore[invalid-argument-type]
+    rpc._rpc_session_started = True
+    content = b"A" * 3000  # 3 fragments: 1024, 1024, 952
+
+    ok = await rpc.storage_write("/ext/big.bin", content)
+
+    assert ok is True
+    # One pacing sleep per non-final fragment; none after the final fragment.
+    assert len(slept) == 2
+    expected = sum(len(f) for f in transport.sent[:-1]) / rpc._WRITE_THROUGHPUT_BYTES_S
+    assert sum(slept) == pytest.approx(expected)
+
+
+@pytest.mark.asyncio
+async def test_single_frame_write_is_not_paced(monkeypatch):
+    slept: list[float] = []
+
+    async def _record(seconds):
+        slept.append(seconds)
+
+    monkeypatch.setattr("flipperzero_mcp.rpc.protobuf_rpc.asyncio.sleep", _record)
+    transport = RecordingTransport()
+    rpc = ProtobufRPC(transport)  # ty: ignore[invalid-argument-type]
+    rpc._rpc_session_started = True
+
+    assert await rpc.storage_write("/ext/small.bin", b"hi") is True
+    assert slept == []  # a one-fragment write needs no backpressure
+
+
+@pytest.mark.asyncio
 async def test_small_write_is_single_frame():
     transport = RecordingTransport()
     rpc = ProtobufRPC(transport)  # ty: ignore[invalid-argument-type]
