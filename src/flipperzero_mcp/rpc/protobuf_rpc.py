@@ -1075,11 +1075,14 @@ class ProtobufRPC:
             logger.debug("_storage_md5sum_internal failed", exc_info=True)
         return None
 
+    _WRITE_CHUNK_SIZE = 1024  # RPC frame payload slice; validated on hardware in Phase 6.
+
     async def storage_write(self, path: str, content: bytes) -> bool:
         async with self._io_lock:
+            timeout = max(3.0, len(content) / 65536.0)
             try:
                 return await asyncio.wait_for(
-                    self._storage_write_internal(path, content), timeout=3.0
+                    self._storage_write_internal(path, content), timeout=timeout
                 )
             except Exception:
                 logger.debug("storage_write(%s) timed out or failed", path, exc_info=True)
@@ -1087,21 +1090,34 @@ class ProtobufRPC:
 
     async def _storage_write_internal(self, path: str, content: bytes) -> bool:
         try:
-            main_request = flipper_pb2.Main()
-            main_request.command_id = self._get_next_command_id()
-            main_request.has_next = False
-
-            req = storage_pb2.WriteRequest()
-            req.path = path
-            f = storage_pb2.File()
-            f.data = content
-            req.file.CopyFrom(f)
-            main_request.storage_write_request.CopyFrom(req)
-
-            main_response = await self._send_rpc_message(main_request)
-            return bool(
-                main_response and main_response.command_status == flipper_pb2.CommandStatus.OK
-            )
+            await self._ensure_rpc_session_started()
+            command_id = self._get_next_command_id()
+            chunks = self._chunk(content, self._WRITE_CHUNK_SIZE)
+            for index, chunk in enumerate(chunks):
+                is_last = index == len(chunks) - 1
+                main_request = flipper_pb2.Main()
+                main_request.command_id = command_id
+                main_request.has_next = not is_last
+                req = storage_pb2.WriteRequest()
+                req.path = path
+                req.file.data = chunk
+                main_request.storage_write_request.CopyFrom(req)
+                payload = main_request.SerializeToString()
+                framed = self._encode_varint(len(payload)) + payload
+                if is_last:
+                    await self.transport.send(framed)
+                    response = await self._receive_main_message()
+                    return bool(
+                        response and response.command_status == flipper_pb2.CommandStatus.OK
+                    )
+                await self.transport.send(framed)
+            return False
         except Exception:
             logger.debug("_storage_write_internal failed", exc_info=True)
             return False
+
+    @staticmethod
+    def _chunk(content: bytes, size: int) -> list[bytes]:
+        if not content:
+            return [b""]
+        return [content[i : i + size] for i in range(0, len(content), size)]

@@ -1,0 +1,76 @@
+"""Unit tests for chunked storage_write framing."""
+
+import pytest
+
+from flipperzero_mcp.rpc.protobuf_gen import flipper_pb2
+from flipperzero_mcp.rpc.protobuf_rpc import ProtobufRPC
+
+
+class RecordingTransport:
+    """Captures sent frames and replies with one canned WriteResponse (OK)."""
+
+    def __init__(self):
+        self.sent: list[bytes] = []
+        ok = flipper_pb2.Main()
+        ok.command_status = flipper_pb2.CommandStatus.OK
+        ok.empty.CopyFrom(flipper_pb2.Empty())
+        payload = ok.SerializeToString()
+        self._reply = ProtobufRPC._encode_varint(len(payload)) + payload
+        self._reply_pos = 0
+
+    async def send(self, data: bytes) -> None:
+        self.sent.append(data)
+
+    async def receive_exact(self, n: int, timeout: float | None = None) -> bytes:  # noqa: ARG002
+        chunk = self._reply[self._reply_pos : self._reply_pos + n]
+        self._reply_pos += n
+        return chunk
+
+    async def is_connected(self) -> bool:
+        return True
+
+
+def _decode_frames(sent: list[bytes]) -> list[flipper_pb2.Main]:
+    frames = []
+    for raw in sent:
+        idx, shift, length = 0, 0, 0
+        while True:
+            byte = raw[idx]
+            length |= (byte & 0x7F) << shift
+            idx += 1
+            if not (byte & 0x80):
+                break
+            shift += 7
+        msg = flipper_pb2.Main()
+        msg.ParseFromString(raw[idx : idx + length])
+        frames.append(msg)
+    return frames
+
+
+@pytest.mark.asyncio
+async def test_large_write_is_chunked_with_has_next():
+    rpc = ProtobufRPC(RecordingTransport())
+    rpc._rpc_session_started = True  # skip CLI negotiation
+    content = b"A" * 3000  # > one 1024-byte chunk
+
+    ok = await rpc.storage_write("/ext/big.bin", content)
+
+    assert ok is True
+    frames = _decode_frames(rpc.transport.sent)
+    assert len(frames) == 3  # 1024 + 1024 + 952
+    assert all(f.command_id == frames[0].command_id for f in frames)
+    assert [f.has_next for f in frames] == [True, True, False]
+    rebuilt = b"".join(f.storage_write_request.file.data for f in frames)
+    assert rebuilt == content
+    assert all(f.storage_write_request.path == "/ext/big.bin" for f in frames)
+
+
+@pytest.mark.asyncio
+async def test_small_write_is_single_frame():
+    rpc = ProtobufRPC(RecordingTransport())
+    rpc._rpc_session_started = True
+    ok = await rpc.storage_write("/ext/small.bin", b"hi")
+    assert ok is True
+    frames = _decode_frames(rpc.transport.sent)
+    assert len(frames) == 1
+    assert frames[0].has_next is False
