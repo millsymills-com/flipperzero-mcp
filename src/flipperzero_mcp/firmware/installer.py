@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import logging
 from typing import Any, Protocol
@@ -11,6 +12,10 @@ from flipperzero_mcp.firmware.codes import update_code_message
 logger = logging.getLogger(__name__)
 
 _UPDATE_ROOT = "/ext/update"
+# storage_md5sum returns None while the device is still flushing a large write
+# to SD; retry across this many attempts with a settle delay before trusting it.
+_MD5_ATTEMPTS = 5
+_MD5_SETTLE_S = 2.0
 
 
 class FlashError(RuntimeError):
@@ -30,6 +35,41 @@ class _BundleLike(Protocol):
     manifest_name: str
     target: str
     files: list[tuple[str, bytes]]
+
+
+class _Md5Reader(Protocol):
+    async def storage_md5sum(self, path: str) -> str | None: ...
+
+
+async def _verify_md5(
+    rpc: _Md5Reader, path: str, expected: str, *, settle_s: float = _MD5_SETTLE_S
+) -> bool:
+    """Confirm the device-side md5 matches, retrying while the digest is unreadable.
+
+    ``storage_md5sum`` returns ``None`` when the device is still flushing a large
+    write to SD, so a ``None`` is treated as "not ready yet" and retried after a
+    settle delay. A non-``None`` digest that differs is a definitive mismatch and
+    fails immediately.
+
+    Args:
+        rpc: Live RPC client.
+        path: Device path just written.
+        expected: Expected lowercase hex md5 of the local data.
+        settle_s: Delay between retries (0 in tests for determinism).
+
+    Returns:
+        True if the device digest matches; False on a definitive mismatch or if
+        the digest stays unreadable across all attempts.
+    """
+    for attempt in range(_MD5_ATTEMPTS):
+        device_md5 = await rpc.storage_md5sum(path)
+        if device_md5 == expected:
+            return True
+        if device_md5 is not None:
+            return False
+        if attempt + 1 < _MD5_ATTEMPTS:
+            await asyncio.sleep(settle_s)
+    return False
 
 
 async def install_bundle(rpc: _RPCLike, bundle: _BundleLike, *, pkg_name: str) -> None:
@@ -66,9 +106,8 @@ async def install_bundle(rpc: _RPCLike, bundle: _BundleLike, *, pkg_name: str) -
             await rpc.storage_mkdir(parent)
         if not await rpc.storage_write(dest, data):
             raise FlashError(f"failed to write {dest}")
-        device_md5 = await rpc.storage_md5sum(dest)
         expected_md5 = hashlib.md5(data, usedforsecurity=False).hexdigest()
-        if device_md5 != expected_md5:
+        if not await _verify_md5(rpc, dest, expected_md5):
             raise FlashError(f"md5 mismatch after writing {dest}")
 
     manifest = f"{pkg_dir}/{bundle.manifest_name}"

@@ -5,8 +5,43 @@ from typing import ClassVar
 
 import pytest
 
-from flipperzero_mcp.firmware.installer import FlashError, install_bundle
+from flipperzero_mcp.firmware.installer import FlashError, _verify_md5, install_bundle
 from flipperzero_mcp.rpc.protobuf_gen import system_pb2
+
+
+class _Md5RPC:
+    """Minimal RPC stub returning a scripted sequence of md5sum results."""
+
+    def __init__(self, results: list[str | None]):
+        self._results = results
+        self.calls = 0
+
+    async def storage_md5sum(self, path: str) -> str | None:
+        _ = path
+        result = self._results[self.calls]
+        self.calls += 1
+        return result
+
+
+@pytest.mark.asyncio
+async def test_verify_md5_retries_while_digest_unreadable():
+    rpc = _Md5RPC([None, None, "abc"])
+    assert await _verify_md5(rpc, "/ext/x", "abc", settle_s=0.0) is True
+    assert rpc.calls == 3
+
+
+@pytest.mark.asyncio
+async def test_verify_md5_fails_immediately_on_definitive_mismatch():
+    rpc = _Md5RPC(["deadbeef", "abc"])
+    assert await _verify_md5(rpc, "/ext/x", "abc", settle_s=0.0) is False
+    assert rpc.calls == 1  # did not retry past a non-None mismatch
+
+
+@pytest.mark.asyncio
+async def test_verify_md5_gives_up_if_digest_never_readable():
+    rpc = _Md5RPC([None, None, None, None, None])
+    assert await _verify_md5(rpc, "/ext/x", "abc", settle_s=0.0) is False
+    assert rpc.calls == 5
 
 
 class FakeBundle:
