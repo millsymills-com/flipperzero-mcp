@@ -2,12 +2,9 @@
 
 from __future__ import annotations
 
-import logging
 import re
 import tarfile
 from dataclasses import dataclass
-
-logger = logging.getLogger(__name__)
 
 _MANIFEST = "update.fuf"
 _TARGET_RE = re.compile(r"flipper-z-(f\w+)-update", re.IGNORECASE)
@@ -35,7 +32,8 @@ def _target_from_name(name: str) -> str:
 
 def _extract_members(tgz_path: str) -> list[tuple[str, bytes]]:
     files: list[tuple[str, bytes]] = []
-    with tarfile.open(tgz_path, "r:gz") as tar:  # nosec B202 — extractfile reads into memory, no disk write
+    # extractfile reads each member into memory; nothing is written to disk.
+    with tarfile.open(tgz_path, "r:gz") as tar:
         members = [m for m in tar.getmembers() if m.isfile()]
         if not members:
             raise BundleError("bundle archive is empty")

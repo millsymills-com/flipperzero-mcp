@@ -31,3 +31,11 @@ def test_load_local_bundle_rejects_missing_manifest(tmp_path):
     tgz = _make_tgz(tmp_path, {"upd/firmware.dfu": b"DFU"})
     with pytest.raises(BundleError, match=r"update\.fuf"):
         load_local_bundle(str(tgz))
+
+
+def test_load_local_bundle_rejects_empty_archive(tmp_path):
+    path = tmp_path / "flipper-z-f7-update-empty.tgz"
+    with tarfile.open(path, "w:gz"):
+        pass
+    with pytest.raises(BundleError, match="empty"):
+        load_local_bundle(str(path))
