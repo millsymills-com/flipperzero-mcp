@@ -1,5 +1,7 @@
 import pytest
+from fastmcp.exceptions import ToolError
 
+from flipperzero_mcp.config import FlipperConfig
 from flipperzero_mcp.errors import FlipperNotConnectedError
 from flipperzero_mcp.tools import _common
 
@@ -12,6 +14,11 @@ class FakeCtx:
 class FakeContextObj:
     def __init__(self, client):
         self.client = client
+
+
+class FakeContextWithConfig:
+    def __init__(self, config: FlipperConfig):
+        self.config = config
 
 
 class FakeClient:
@@ -67,3 +74,17 @@ async def test_ensure_connected_reconnects_when_is_connected_raises(exc):
     await _common.ensure_connected(ctx)
     assert client.disconnect_calls == 1
     assert client.connect_calls == 1
+
+
+def test_require_firmware_flash_raises_when_flash_disabled():
+    cfg = FlipperConfig(_env_file=None, enable_write_tools=True, enable_firmware_flash=False)  # ty: ignore[unknown-argument]
+    ctx = FakeCtx(FakeContextWithConfig(cfg))
+    with pytest.raises(ToolError, match="FLIPPER_ENABLE_FIRMWARE_FLASH"):
+        _common.require_firmware_flash(ctx)  # ty: ignore[invalid-argument-type]
+
+
+def test_require_firmware_flash_raises_when_write_tools_disabled():
+    cfg = FlipperConfig(_env_file=None, enable_write_tools=False, enable_firmware_flash=False)  # ty: ignore[unknown-argument]
+    ctx = FakeCtx(FakeContextWithConfig(cfg))
+    with pytest.raises(ToolError):
+        _common.require_firmware_flash(ctx)  # ty: ignore[invalid-argument-type]

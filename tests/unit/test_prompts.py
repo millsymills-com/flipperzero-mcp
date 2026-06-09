@@ -43,3 +43,22 @@ async def test_flipper_install_prompt_embeds_url_and_pipeline():
     assert url in text
     assert "flipperzero_fs_push" in text
     assert "flipper://workflow/install-app" in text
+
+
+async def test_flipper_install_prompt_is_firmware_flavor_aware():
+    url = "https://github.com/example/flipper-app"
+    async with Client(_server()) as client:
+        result = await client.get_prompt("flipper_install", {"github_url": url})
+    text = result.messages[0].content.text
+    assert "firmware" in text.lower()
+    assert "flavor" in text.lower()
+    assert "ufbt update --channel" in text
+    assert "Momentum" in text
+    assert "STOP" in text
+
+
+async def test_flipper_doctor_prompt_reports_firmware_flavor():
+    async with Client(_server()) as client:
+        result = await client.get_prompt("flipper_doctor")
+    text = result.messages[0].content.text
+    assert "flavor" in text.lower()

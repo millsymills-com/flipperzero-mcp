@@ -16,7 +16,7 @@ This server is graded against the canonical MCP standards at
 uv run consistency-check audit --repo flipperzero-mcp
 ```
 
-Stage is declared in the README `## Status` section (currently **S1**); the
+Stage is declared in the README `## Status` section (currently **S2**); the
 auditor scopes rules to the declared stage.
 
 ## Project
@@ -46,6 +46,14 @@ or WiFi.
   (plus `usb`/`wifi`) and are local-only. The default suite is
   `uv run pytest -m "not integration"`.
 - **Firmware is not built in CI.** It is harvested as-is for WiFi users.
+- **`firmware/` module** (`flavor.py`, `bundles.py`, `installer.py`,
+  `codes.py`): classifies firmware flavor (Official vs Momentum), resolves and
+  downloads bundles with sha256 verification, and drives the on-device installer
+  via chunked `storage_write` (required for large files). Gated behind
+  `FLIPPER_ENABLE_FIRMWARE_FLASH=true` (plus `FLIPPER_ENABLE_WRITE_TOOLS=true`).
+- **Dual-firmware golden fixtures.** Recorded fixtures live under
+  `tests/golden/fixtures/{momentum,official}/`. Re-record after changing the
+  protobuf schema or adding tools that have firmware-specific output.
 
 ## Agent skills
 

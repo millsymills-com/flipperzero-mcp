@@ -436,6 +436,44 @@ class ProtobufRPC:
             logger.debug("_system_protobuf_version_internal failed", exc_info=True)
         return None
 
+    async def system_update(self, manifest_path: str) -> int:
+        """Validate an update bundle manifest on the device.
+
+        Args:
+            manifest_path: Absolute device path to ``update.fuf``.
+
+        Returns:
+            The ``UpdateResponse.UpdateResultCode`` integer (``0`` == OK).
+        """
+        async with self._io_lock:
+            try:
+                main_request = flipper_pb2.Main()
+                main_request.command_id = self._get_next_command_id()
+                main_request.has_next = False
+                req = system_pb2.UpdateRequest()
+                req.update_manifest = manifest_path
+                main_request.system_update_request.CopyFrom(req)
+                response = await self._send_rpc_message(main_request)
+                if response and response.HasField("system_update_response"):
+                    return int(response.system_update_response.code)
+                return int(system_pb2.UpdateResponse.UnspecifiedError)
+            except Exception:
+                logger.debug("system_update failed", exc_info=True)
+                return int(system_pb2.UpdateResponse.UnspecifiedError)
+
+    async def system_reboot_update(self) -> None:
+        """Reboot the device into UPDATE mode (fire-and-forget; no response)."""
+        async with self._io_lock:
+            await self._ensure_rpc_session_started()
+            main_request = flipper_pb2.Main()
+            main_request.command_id = self._get_next_command_id()
+            main_request.has_next = False
+            req = system_pb2.RebootRequest()
+            req.mode = system_pb2.RebootRequest.UPDATE
+            main_request.system_reboot_request.CopyFrom(req)
+            payload = main_request.SerializeToString()
+            await self.transport.send(self._encode_varint(len(payload)) + payload)
+
     async def system_datetime(self) -> dict[str, int] | None:
         """Return the device date/time fields reported by firmware."""
         async with self._io_lock:
@@ -1065,11 +1103,17 @@ class ProtobufRPC:
             logger.debug("_storage_md5sum_internal failed", exc_info=True)
         return None
 
+    _WRITE_CHUNK_SIZE = 1024  # Bytes per RPC write frame; conservative for the Flipper serial link.
+
     async def storage_write(self, path: str, content: bytes) -> bool:
         async with self._io_lock:
+            # Effective write+flush throughput over USB CDC is ~80 KB/s; a small
+            # write right after a large one can take ~10 s to ack while the SD
+            # flushes, so budget a 15 s floor plus a conservative per-byte term.
+            timeout = max(15.0, len(content) / 40000.0)
             try:
                 return await asyncio.wait_for(
-                    self._storage_write_internal(path, content), timeout=3.0
+                    self._storage_write_internal(path, content), timeout=timeout
                 )
             except Exception:
                 logger.debug("storage_write(%s) timed out or failed", path, exc_info=True)
@@ -1077,21 +1121,33 @@ class ProtobufRPC:
 
     async def _storage_write_internal(self, path: str, content: bytes) -> bool:
         try:
-            main_request = flipper_pb2.Main()
-            main_request.command_id = self._get_next_command_id()
-            main_request.has_next = False
-
-            req = storage_pb2.WriteRequest()
-            req.path = path
-            f = storage_pb2.File()
-            f.data = content
-            req.file.CopyFrom(f)
-            main_request.storage_write_request.CopyFrom(req)
-
-            main_response = await self._send_rpc_message(main_request)
-            return bool(
-                main_response and main_response.command_status == flipper_pb2.CommandStatus.OK
-            )
+            await self._ensure_rpc_session_started()
+            command_id = self._get_next_command_id()
+            chunks = self._chunk(content, self._WRITE_CHUNK_SIZE)
+            for index, chunk in enumerate(chunks):
+                is_last = index == len(chunks) - 1
+                main_request = flipper_pb2.Main()
+                main_request.command_id = command_id
+                main_request.has_next = not is_last
+                req = storage_pb2.WriteRequest()
+                req.path = path
+                req.file.data = chunk
+                main_request.storage_write_request.CopyFrom(req)
+                payload = main_request.SerializeToString()
+                framed = self._encode_varint(len(payload)) + payload
+                await self.transport.send(framed)
+                if is_last:
+                    response = await self._receive_main_message(timeout=2.5)
+                    return bool(
+                        response and response.command_status == flipper_pb2.CommandStatus.OK
+                    )
+            return False
         except Exception:
             logger.debug("_storage_write_internal failed", exc_info=True)
             return False
+
+    @staticmethod
+    def _chunk(content: bytes, size: int) -> list[bytes]:
+        if not content:
+            return [b""]
+        return [content[i : i + size] for i in range(0, len(content), size)]
