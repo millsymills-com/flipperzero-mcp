@@ -35,6 +35,11 @@ def register_systeminfo_tools(mcp: FastMCP) -> None:
             health = await client.get_connection_health(probe_rpc=True)
             device = await client.get_device_info()
             firmware = classify(device)
+            # FlipperClient.get_device_info normalizes firmware_version -> "firmware",
+            # so the classifier (which reads raw keys) sees no version here.
+            fw_version = firmware.version or (
+                device["firmware"] if device.get("firmware") not in (None, "Unknown") else None
+            )
             sd = await client.check_sd_card_available()
         except Exception as e:
             _classify_client_error(e)
@@ -45,7 +50,7 @@ def register_systeminfo_tools(mcp: FastMCP) -> None:
             "device": device,
             "firmware": {
                 "flavor": firmware.flavor.value,
-                "version": firmware.version,
+                "version": fw_version,
                 "origin_fork": firmware.origin_fork,
                 "origin_git": firmware.origin_git,
                 "target": firmware.target,
