@@ -41,3 +41,12 @@ def test_wifi_transport_with_host_accepted():
 def test_auto_transport_without_wifi_host_allowed():
     cfg = FlipperConfig(_env_file=None, transport="auto")
     assert cfg.wifi_configured is False
+
+
+def test_firmware_flash_disabled_by_default():
+    assert FlipperConfig(_env_file=None).enable_firmware_flash is False
+
+
+def test_firmware_flash_enabled_via_env(monkeypatch):
+    monkeypatch.setenv("FLIPPER_ENABLE_FIRMWARE_FLASH", "true")
+    assert FlipperConfig(_env_file=None).enable_firmware_flash is True

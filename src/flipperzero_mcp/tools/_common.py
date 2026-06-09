@@ -40,6 +40,23 @@ def require_write_tools(ctx: Context) -> None:
         )
 
 
+def require_firmware_flash(ctx: Context) -> None:
+    """Gate the firmware-flash tool behind its dedicated opt-in.
+
+    Args:
+        ctx: FastMCP request context carrying the server config.
+
+    Raises:
+        ToolError: If write tools or firmware flashing are not both enabled.
+    """
+    require_write_tools(ctx)
+    if not get_server_context(ctx).config.enable_firmware_flash:
+        raise ToolError(
+            "Firmware flashing is disabled. Set FLIPPER_ENABLE_FIRMWARE_FLASH=true "
+            "(in addition to FLIPPER_ENABLE_WRITE_TOOLS) to allow flashing firmware."
+        )
+
+
 def get_client(ctx: Context) -> FlipperClient:
     """Return the FlipperClient owned by the lifespan."""
     return get_server_context(ctx).client
