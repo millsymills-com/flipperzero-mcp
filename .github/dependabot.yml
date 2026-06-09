@@ -17,7 +17,5 @@ updates:
     cooldown:
       default-days: 7
     groups:
-      dev-deps:
-        dependency-type: "development"
-      runtime-deps:
-        dependency-type: "production"
+      dependencies:
+        patterns: ["*"]
