@@ -1,0 +1,42 @@
+name: Bug report
+description: Something the server does wrong, or a tool that misbehaves.
+labels: ["needs-triage"]
+body:
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what actually happened.
+      placeholder: Calling flipperzero_fs_push returned an integrity mismatch on a known-good file...
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: The exact tool calls / commands, in order.
+    validations:
+      required: true
+  - type: dropdown
+    id: transport
+    attributes:
+      label: Transport
+      options:
+        - USB
+        - WiFi (ESP32 bridge)
+        - auto
+    validations:
+      required: true
+  - type: input
+    id: firmware
+    attributes:
+      label: Flipper firmware
+      description: From flipperzero_system_info (e.g. official 1.4.3, Momentum mntm-012).
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs
+      description: stderr output with FLIPPER_DEBUG=true, if available. Redact secrets.
+      render: text
