@@ -2,6 +2,7 @@
 
 import pytest
 
+from flipperzero_mcp.errors import FlipperTimeoutError
 from flipperzero_mcp.rpc.protobuf_gen import flipper_pb2, system_pb2
 from flipperzero_mcp.rpc.protobuf_rpc import ProtobufRPC
 
@@ -42,6 +43,19 @@ async def test_system_update_returns_target_mismatch_code():
     rpc._rpc_session_started = True
     code = await rpc.system_update("/ext/update/x/update.fuf")
     assert code == system_pb2.UpdateResponse.TargetMismatch
+
+
+@pytest.mark.asyncio
+async def test_system_update_raises_timeout_on_dropped_link(monkeypatch):
+    rpc = ProtobufRPC(UpdateTransport(system_pb2.UpdateResponse.OK))  # ty: ignore[invalid-argument-type]
+    rpc._rpc_session_started = True
+
+    async def _no_response(_request):
+        return None
+
+    monkeypatch.setattr(rpc, "_send_rpc_message", _no_response)
+    with pytest.raises(FlipperTimeoutError):
+        await rpc.system_update("/ext/update/x/update.fuf")
 
 
 @pytest.mark.asyncio

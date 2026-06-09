@@ -87,7 +87,10 @@ _MOMENTUM_RELEASES = "https://api.github.com/repos/Next-Flip/Momentum-Firmware/r
 def _select_official_file(
     directory: dict[str, Any], channel: str, version: str, target: str
 ) -> dict[str, Any]:
-    channels = {c["id"]: c for c in directory.get("channels", [])}
+    try:
+        channels = {c["id"]: c for c in directory.get("channels", [])}
+    except (KeyError, TypeError) as e:
+        raise BundleError(f"malformed official directory (channel entry): {e}") from e
     if channel not in channels:
         raise BundleError(f"unknown official channel {channel!r}")
     versions = channels[channel].get("versions", [])
@@ -107,9 +110,19 @@ def _select_official_file(
 
 
 async def _fetch(client: httpx.AsyncClient, url: str) -> bytes:
-    response = await client.get(url, follow_redirects=True, timeout=60.0)
-    response.raise_for_status()
+    try:
+        response = await client.get(url, follow_redirects=True, timeout=60.0)
+        response.raise_for_status()
+    except httpx.HTTPError as e:
+        raise BundleError(f"failed to fetch {url}: {e}") from e
     return response.content
+
+
+def _load_json(raw: bytes, url: str) -> Any:
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError as e:
+        raise BundleError(f"malformed JSON from {url}: {e}") from e
 
 
 def _verify_sha256(data: bytes, expected: str) -> None:
@@ -126,16 +139,20 @@ def _bundle_from_tgz_bytes(data: bytes, target: str) -> LocalBundle:
 
 async def _download_official(channel: str, version: str, target: str) -> LocalBundle:
     async with httpx.AsyncClient() as client:
-        directory = json.loads(await _fetch(client, _OFFICIAL_DIRECTORY))
+        directory = _load_json(await _fetch(client, _OFFICIAL_DIRECTORY), _OFFICIAL_DIRECTORY)
         entry = _select_official_file(directory, channel, version, target)
-        data = await _fetch(client, str(entry["url"]))
-    _verify_sha256(data, str(entry["sha256"]))
+        try:
+            url, expected = str(entry["url"]), str(entry["sha256"])
+        except (KeyError, TypeError) as e:
+            raise BundleError(f"malformed official bundle entry: missing {e}") from e
+        data = await _fetch(client, url)
+    _verify_sha256(data, expected)
     return _bundle_from_tgz_bytes(data, target)
 
 
 async def _download_momentum(version: str, target: str) -> LocalBundle:
     async with httpx.AsyncClient() as client:
-        releases = json.loads(await _fetch(client, _MOMENTUM_RELEASES))
+        releases = _load_json(await _fetch(client, _MOMENTUM_RELEASES), _MOMENTUM_RELEASES)
         if not releases:
             raise BundleError("no Momentum releases found")
         release = (
@@ -145,18 +162,18 @@ async def _download_momentum(version: str, target: str) -> LocalBundle:
         )
         if release is None:
             raise BundleError(f"Momentum release {version!r} not found")
-        tag = release["tag_name"]
-        asset = next(
-            (
-                a
-                for a in release.get("assets", [])
-                if a["name"] == f"flipper-z-{target}-update-{tag}.tgz"
-            ),
-            None,
-        )
-        if asset is None:
-            raise BundleError(f"no {target} firmware bundle in Momentum release {tag}")
-        data = await _fetch(client, asset["browser_download_url"])
+        try:
+            tag = release["tag_name"]
+            wanted = f"flipper-z-{target}-update-{tag}.tgz"
+            asset = next(
+                (a for a in release.get("assets", []) if a.get("name") == wanted), None
+            )
+            if asset is None:
+                raise BundleError(f"no {target} firmware bundle in Momentum release {tag}")
+            download_url = asset["browser_download_url"]
+        except (KeyError, TypeError) as e:
+            raise BundleError(f"malformed Momentum release metadata: missing {e}") from e
+        data = await _fetch(client, download_url)
     digest = asset.get("digest", "")
     if not digest.startswith("sha256:"):
         raise BundleError("Momentum asset is missing a sha256 digest")

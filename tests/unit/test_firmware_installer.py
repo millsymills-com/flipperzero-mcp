@@ -5,6 +5,7 @@ from typing import ClassVar
 
 import pytest
 
+from flipperzero_mcp.errors import FlipperTimeoutError
 from flipperzero_mcp.firmware.installer import FlashError, _verify_md5, install_bundle
 from flipperzero_mcp.rpc.protobuf_gen import system_pb2
 
@@ -114,5 +115,17 @@ async def test_install_aborts_on_missing_hardware_target():
 async def test_install_aborts_on_non_ok_update_code():
     rpc = FakeRPC(update_code=system_pb2.UpdateResponse.ManifestInvalid)
     with pytest.raises(FlashError, match="manifest"):
+        await install_bundle(rpc, FakeBundle(), pkg_name="upd-test")
+    assert rpc.rebooted is False
+
+
+@pytest.mark.asyncio
+async def test_install_wraps_link_drop_during_update_as_flash_error():
+    class LinkDropRPC(FakeRPC):
+        async def system_update(self, manifest_path):  # noqa: ARG002
+            raise FlipperTimeoutError("no response to system_update")
+
+    rpc = LinkDropRPC()
+    with pytest.raises(FlashError, match="link dropped"):
         await install_bundle(rpc, FakeBundle(), pkg_name="upd-test")
     assert rpc.rebooted is False

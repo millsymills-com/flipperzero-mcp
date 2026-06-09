@@ -444,22 +444,26 @@ class ProtobufRPC:
 
         Returns:
             The ``UpdateResponse.UpdateResultCode`` integer (``0`` == OK).
+
+        Raises:
+            FlipperTimeoutError: If the device link dropped before returning an
+                update result (distinct from a device-returned rejection code).
         """
         async with self._io_lock:
-            try:
-                main_request = flipper_pb2.Main()
-                main_request.command_id = self._get_next_command_id()
-                main_request.has_next = False
-                req = system_pb2.UpdateRequest()
-                req.update_manifest = manifest_path
-                main_request.system_update_request.CopyFrom(req)
-                response = await self._send_rpc_message(main_request)
-                if response and response.HasField("system_update_response"):
-                    return int(response.system_update_response.code)
-                return int(system_pb2.UpdateResponse.UnspecifiedError)
-            except Exception:
-                logger.debug("system_update failed", exc_info=True)
-                return int(system_pb2.UpdateResponse.UnspecifiedError)
+            main_request = flipper_pb2.Main()
+            main_request.command_id = self._get_next_command_id()
+            main_request.has_next = False
+            req = system_pb2.UpdateRequest()
+            req.update_manifest = manifest_path
+            main_request.system_update_request.CopyFrom(req)
+            response = await self._send_rpc_message(main_request)
+            if response is None:
+                raise FlipperTimeoutError(
+                    "no response to system_update; the device link dropped before validation"
+                )
+            if response.HasField("system_update_response"):
+                return int(response.system_update_response.code)
+            return int(system_pb2.UpdateResponse.UnspecifiedError)
 
     async def system_reboot_update(self) -> None:
         """Reboot the device into UPDATE mode (fire-and-forget; no response)."""

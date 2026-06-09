@@ -64,6 +64,62 @@ async def test_firmware_install_rejects_wrong_confirm_token(monkeypatch):
             )
 
 
+def _firmware_flash_server():
+    return create_server(
+        FlipperConfig(_env_file=None, enable_write_tools=True, enable_firmware_flash=True)  # ty: ignore[unknown-argument]
+    )
+
+
+@pytest.mark.asyncio
+async def test_firmware_install_rejects_unknown_flavor(monkeypatch):
+    monkeypatch.setattr("flipperzero_mcp.server.get_transport", lambda _t, _c: FakeTransport())
+    monkeypatch.setattr("flipperzero_mcp.rpc.client.ProtobufRPC", FakeRPC)
+    async with Client(_firmware_flash_server()) as client:
+        with pytest.raises(ToolError, match="unknown flavor"):
+            await client.call_tool(
+                "flipperzero_firmware_install",
+                {"source": {"flavor": "bogus"}, "confirm": "Lun10n"},
+            )
+
+
+@pytest.mark.asyncio
+async def test_firmware_install_rejects_source_without_path_or_flavor(monkeypatch):
+    monkeypatch.setattr("flipperzero_mcp.server.get_transport", lambda _t, _c: FakeTransport())
+    monkeypatch.setattr("flipperzero_mcp.rpc.client.ProtobufRPC", FakeRPC)
+    async with Client(_firmware_flash_server()) as client:
+        with pytest.raises(ToolError, match=r"path.*flavor"):
+            await client.call_tool(
+                "flipperzero_firmware_install",
+                {"source": {"channel": "release"}, "confirm": "Lun10n"},
+            )
+
+
+class FakeRPCNoTarget:
+    def __init__(self, transport, *, io_lock=None):
+        pass
+
+    async def ping(self, data=b"ping"):
+        return data
+
+    async def get_device_info(self):
+        return {"hardware_name": "Lun10n", "hardware_target": "", "firmware_version": "1.2.3"}
+
+    async def storage_info(self, _path):
+        return (1000, 500)
+
+
+@pytest.mark.asyncio
+async def test_firmware_install_aborts_when_device_reports_no_target(monkeypatch):
+    monkeypatch.setattr("flipperzero_mcp.server.get_transport", lambda _t, _c: FakeTransport())
+    monkeypatch.setattr("flipperzero_mcp.rpc.client.ProtobufRPC", FakeRPCNoTarget)
+    async with Client(_firmware_flash_server()) as client:
+        with pytest.raises(ToolError, match="hardware target"):
+            await client.call_tool(
+                "flipperzero_firmware_install",
+                {"source": {"flavor": "official"}, "confirm": "Lun10n"},
+            )
+
+
 class FakeRPCEmptyDeviceInfo:
     def __init__(self, transport, *, io_lock=None):
         pass

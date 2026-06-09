@@ -22,7 +22,13 @@ _RECONNECT_BUDGET_S = 300.0
 async def _resolve(source: dict[str, Any], target: str) -> Any:
     if "path" in source:
         return load_local_bundle(source["path"])
-    flavor = FirmwareFlavor(source["flavor"])
+    if "flavor" not in source:
+        raise BundleError("source must specify either 'path' or 'flavor'")
+    try:
+        flavor = FirmwareFlavor(source["flavor"])
+    except ValueError as e:
+        choices = ", ".join(f.value for f in FirmwareFlavor)
+        raise BundleError(f"unknown flavor {source['flavor']!r}; expected one of: {choices}") from e
     return await download_bundle(
         flavor,
         channel=source.get("channel", "release"),
@@ -94,9 +100,11 @@ def register_firmware_tools(mcp: FastMCP) -> None:
             raise ToolError(
                 f"confirm token {confirm!r} does not match connected device {device_name!r}"
             )
+        if not before.target:
+            raise ToolError("device did not report a hardware target; cannot select a bundle")
 
         try:
-            bundle = await _resolve(source, before.target or "f7")
+            bundle = await _resolve(source, before.target)
             await install_bundle(rpc, bundle, pkg_name=_PKG_NAME)
         except (BundleError, FlashError) as e:
             raise ToolError(str(e)) from e
