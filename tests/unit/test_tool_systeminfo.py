@@ -109,7 +109,7 @@ async def test_systeminfo_surfaces_firmware_block(monkeypatch):
     class MomentumRPC(FakeRPC):
         async def get_device_info(self):
             return {
-                "hardware_name": "Lun10n",
+                "hardware_name": "TestFlipper",
                 "hardware_target": "7",
                 "firmware_version": "mntm-012",
                 "firmware_origin_fork": "Momentum",

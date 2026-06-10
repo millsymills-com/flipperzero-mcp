@@ -1,0 +1,94 @@
+{
+  "schema_version": 1,
+  "name": "lock_contention",
+  "description": "Two concurrent get_device_info calls serialized by the shared _io_lock: request/response frames never interleave on the single link.",
+  "meta": {
+    "supports_cli_text_mode": true,
+    "transport": "usb",
+    "firmware": "1.4.3"
+  },
+  "session_pre_started": true,
+  "events": [
+    {
+      "dir": "tx",
+      "b64": "BQgBggIA"
+    },
+    {
+      "dir": "rx",
+      "b64": "HQgBGAGKAhYKEWRldmljZV9pbmZvX21ham9yEgEyHQgBGAGKAhYKEWRldmljZV9pbmZvX21pbm9yEgE0JQgBGAGKAh4KDmhhcmR3YXJlX21vZGVsEgxGbGlwcGVyIFplcm8nCAEYAYoCIAoMaGFyZHdhcmVfdWlkEhAwMDAwMDAwMDAwMDAwMDAwHAgBGAGKAhUKEGhhcmR3YXJlX290cF92ZXISATInCAEYAYoCIAoSaGFyZHdhcmVfdGltZXN0YW1wEgoxNjQ0ODEwODY3GQgBGAGKAhIKDGhhcmR3YXJlX3ZlchICMTIbCAEYAYoCFAoPaGFyZHdhcmVfdGFyZ2V0EgE3GQgBGAGKAhIKDWhhcmR3YXJlX2JvZHkSATkcCAEYAYoCFQoQaGFyZHdhcmVfY29ubmVjdBIBNhwIARgBigIVChBoYXJkd2FyZV9kaXNwbGF5EgExGggBGAGKAhMKDmhhcmR3YXJlX2NvbG9yEgEyGwgBGAGKAhQKD2hhcmR3YXJlX3JlZ2lvbhIBMigIARgBigIhChtoYXJkd2FyZV9yZWdpb25fcHJvdmlzaW9uZWQSAlVTHggBGAGKAhcKDWhhcmR3YXJlX25hbWUSBjAwMDAwMCIIARgBigIbCg9maXJtd2FyZV9jb21taXQSCDg2MjJmMWEyJQgBGAGKAh4KFWZpcm13YXJlX2NvbW1pdF9kaXJ0eRIFZmFsc2UfCAEYAYoCGAoPZmlybXdhcmVfYnJhbmNoEgUxLjQuMx8IARgBigIYChNmaXJtd2FyZV9icmFuY2hfbnVtEgEwIAgBGAGKAhkKEGZpcm13YXJlX3ZlcnNpb24SBTEuNC4zKAgBGAGKAiEKE2Zpcm13YXJlX2J1aWxkX2RhdGUSCjA1LTEyLTIwMjUbCAEYAYoCFAoPZmlybXdhcmVfdGFyZ2V0EgE3HwgBGAGKAhgKEmZpcm13YXJlX2FwaV9tYWpvchICODceCAEYAYoCFwoSZmlybXdhcmVfYXBpX21pbm9yEgExJwgBGAGKAiAKFGZpcm13YXJlX29yaWdpbl9mb3JrEghPZmZpY2lhbFQIARgBigJNChNmaXJtd2FyZV9vcmlnaW5fZ2l0EjZodHRwczovL2dpdGh1Yi5jb20vZmxpcHBlcmRldmljZXMvZmxpcHBlcnplcm8tZmlybXdhcmUaCAEYAYoCEwoLcmFkaW9fYWxpdmUSBHRydWUaCAEYAYoCEwoKcmFkaW9fbW9kZRIFU3RhY2sbCAEYAYoCFAoPcmFkaW9fZnVzX21ham9yEgExGwgBGAGKAhQKD3JhZGlvX2Z1c19taW5vchIBMhkIARgBigISCg1yYWRpb19mdXNfc3ViEgEwHggBGAGKAhcKEHJhZGlvX2Z1c19zcmFtMmISAzE2Sx0IARgBigIWChByYWRpb19mdXNfc3JhbTJhEgIwSx0IARgBigIWCg9yYWRpb19mdXNfZmxhc2gSAzI0SxwIARgBigIVChByYWRpb19zdGFja190eXBlEgEzHQgBGAGKAhYKEXJhZGlvX3N0YWNrX21ham9yEgExHggBGAGKAhcKEXJhZGlvX3N0YWNrX21pbm9yEgIyMBsIARgBigIUCg9yYWRpb19zdGFja19zdWISATAeCAEYAYoCFwoScmFkaW9fc3RhY2tfYnJhbmNoEgEwHwgBGAGKAhgKE3JhZGlvX3N0YWNrX3JlbGVhc2USATIgCAEYAYoCGQoScmFkaW9fc3RhY2tfc3JhbTJiEgMxOUsgCAEYAYoCGQoScmFkaW9fc3RhY2tfc3JhbTJhEgMxNEseCAEYAYoCFwoRcmFkaW9fc3RhY2tfc3JhbTESAjBLIAgBGAGKAhkKEXJhZGlvX3N0YWNrX2ZsYXNoEgQxMTZLJAgBGAGKAh0KDXJhZGlvX2JsZV9tYWMSDDAwMDAwMDAwMDAwMB8IARgBigIYChJlbmNsYXZlX3ZhbGlkX2tleXMSAjEwHAgBGAGKAhUKDWVuY2xhdmVfdmFsaWQSBHRydWUYCAEYAYoCEQoMc3lzdGVtX2RlYnVnEgEwFwgBGAGKAhAKC3N5c3RlbV9sb2NrEgEwGQgBGAGKAhIKDXN5c3RlbV9vcmllbnQSATAfCAEYAYoCGAoTc3lzdGVtX3NsZWVwX2xlZ2FjeRIBMBoIARgBigITCg5zeXN0ZW1fc3RlYWx0aBIBMB0IARgBigIWChFzeXN0ZW1faGVhcF90cmFjaxIBMBcIARgBigIQCgtzeXN0ZW1fYm9vdBIBMB4IARgBigIXChJzeXN0ZW1fbG9jYWxlX3RpbWUSATAeCAEYAYoCFwoSc3lzdGVtX2xvY2FsZV9kYXRlEgEwHggBGAGKAhcKEnN5c3RlbV9sb2NhbGVfdW5pdBIBMBwIARgBigIVChBzeXN0ZW1fbG9nX2xldmVsEgEwIggBGAGKAhsKFnByb3RvYnVmX3ZlcnNpb25fbWFqb3ISATAhCAGKAhwKFnByb3RvYnVmX3ZlcnNpb25fbWlub3ISAjI1"
+    },
+    {
+      "dir": "tx",
+      "b64": "BQgCggIA"
+    },
+    {
+      "dir": "rx",
+      "b64": "HQgCGAGKAhYKEWRldmljZV9pbmZvX21ham9yEgEyHQgCGAGKAhYKEWRldmljZV9pbmZvX21pbm9yEgE0JQgCGAGKAh4KDmhhcmR3YXJlX21vZGVsEgxGbGlwcGVyIFplcm8nCAIYAYoCIAoMaGFyZHdhcmVfdWlkEhAwMDAwMDAwMDAwMDAwMDAwHAgCGAGKAhUKEGhhcmR3YXJlX290cF92ZXISATInCAIYAYoCIAoSaGFyZHdhcmVfdGltZXN0YW1wEgoxNjQ0ODEwODY3GQgCGAGKAhIKDGhhcmR3YXJlX3ZlchICMTIbCAIYAYoCFAoPaGFyZHdhcmVfdGFyZ2V0EgE3GQgCGAGKAhIKDWhhcmR3YXJlX2JvZHkSATkcCAIYAYoCFQoQaGFyZHdhcmVfY29ubmVjdBIBNhwIAhgBigIVChBoYXJkd2FyZV9kaXNwbGF5EgExGggCGAGKAhMKDmhhcmR3YXJlX2NvbG9yEgEyGwgCGAGKAhQKD2hhcmR3YXJlX3JlZ2lvbhIBMigIAhgBigIhChtoYXJkd2FyZV9yZWdpb25fcHJvdmlzaW9uZWQSAlVTHggCGAGKAhcKDWhhcmR3YXJlX25hbWUSBjAwMDAwMCIIAhgBigIbCg9maXJtd2FyZV9jb21taXQSCDg2MjJmMWEyJQgCGAGKAh4KFWZpcm13YXJlX2NvbW1pdF9kaXJ0eRIFZmFsc2UfCAIYAYoCGAoPZmlybXdhcmVfYnJhbmNoEgUxLjQuMx8IAhgBigIYChNmaXJtd2FyZV9icmFuY2hfbnVtEgEwIAgCGAGKAhkKEGZpcm13YXJlX3ZlcnNpb24SBTEuNC4zKAgCGAGKAiEKE2Zpcm13YXJlX2J1aWxkX2RhdGUSCjA1LTEyLTIwMjUbCAIYAYoCFAoPZmlybXdhcmVfdGFyZ2V0EgE3HwgCGAGKAhgKEmZpcm13YXJlX2FwaV9tYWpvchICODceCAIYAYoCFwoSZmlybXdhcmVfYXBpX21pbm9yEgExJwgCGAGKAiAKFGZpcm13YXJlX29yaWdpbl9mb3JrEghPZmZpY2lhbFQIAhgBigJNChNmaXJtd2FyZV9vcmlnaW5fZ2l0EjZodHRwczovL2dpdGh1Yi5jb20vZmxpcHBlcmRldmljZXMvZmxpcHBlcnplcm8tZmlybXdhcmUaCAIYAYoCEwoLcmFkaW9fYWxpdmUSBHRydWUaCAIYAYoCEwoKcmFkaW9fbW9kZRIFU3RhY2sbCAIYAYoCFAoPcmFkaW9fZnVzX21ham9yEgExGwgCGAGKAhQKD3JhZGlvX2Z1c19taW5vchIBMhkIAhgBigISCg1yYWRpb19mdXNfc3ViEgEwHggCGAGKAhcKEHJhZGlvX2Z1c19zcmFtMmISAzE2Sx0IAhgBigIWChByYWRpb19mdXNfc3JhbTJhEgIwSx0IAhgBigIWCg9yYWRpb19mdXNfZmxhc2gSAzI0SxwIAhgBigIVChByYWRpb19zdGFja190eXBlEgEzHQgCGAGKAhYKEXJhZGlvX3N0YWNrX21ham9yEgExHggCGAGKAhcKEXJhZGlvX3N0YWNrX21pbm9yEgIyMBsIAhgBigIUCg9yYWRpb19zdGFja19zdWISATAeCAIYAYoCFwoScmFkaW9fc3RhY2tfYnJhbmNoEgEwHwgCGAGKAhgKE3JhZGlvX3N0YWNrX3JlbGVhc2USATIgCAIYAYoCGQoScmFkaW9fc3RhY2tfc3JhbTJiEgMxOUsgCAIYAYoCGQoScmFkaW9fc3RhY2tfc3JhbTJhEgMxNEseCAIYAYoCFwoRcmFkaW9fc3RhY2tfc3JhbTESAjBLIAgCGAGKAhkKEXJhZGlvX3N0YWNrX2ZsYXNoEgQxMTZLJAgCGAGKAh0KDXJhZGlvX2JsZV9tYWMSDDAwMDAwMDAwMDAwMB8IAhgBigIYChJlbmNsYXZlX3ZhbGlkX2tleXMSAjEwHAgCGAGKAhUKDWVuY2xhdmVfdmFsaWQSBHRydWUYCAIYAYoCEQoMc3lzdGVtX2RlYnVnEgEwFwgCGAGKAhAKC3N5c3RlbV9sb2NrEgEwGQgCGAGKAhIKDXN5c3RlbV9vcmllbnQSATAfCAIYAYoCGAoTc3lzdGVtX3NsZWVwX2xlZ2FjeRIBMBoIAhgBigITCg5zeXN0ZW1fc3RlYWx0aBIBMB0IAhgBigIWChFzeXN0ZW1faGVhcF90cmFjaxIBMBcIAhgBigIQCgtzeXN0ZW1fYm9vdBIBMB4IAhgBigIXChJzeXN0ZW1fbG9jYWxlX3RpbWUSATAeCAIYAYoCFwoSc3lzdGVtX2xvY2FsZV9kYXRlEgEwHggCGAGKAhcKEnN5c3RlbV9sb2NhbGVfdW5pdBIBMBwIAhgBigIVChBzeXN0ZW1fbG9nX2xldmVsEgEwIggCGAGKAhsKFnByb3RvYnVmX3ZlcnNpb25fbWFqb3ISATAhCAKKAhwKFnByb3RvYnVmX3ZlcnNpb25fbWlub3ISAjI1"
+    }
+  ],
+  "expect": {
+    "calls": 2,
+    "device_info_keys": [
+      "device_info_major",
+      "device_info_minor",
+      "enclave_valid",
+      "enclave_valid_keys",
+      "firmware_api_major",
+      "firmware_api_minor",
+      "firmware_branch",
+      "firmware_branch_num",
+      "firmware_build_date",
+      "firmware_commit",
+      "firmware_commit_dirty",
+      "firmware_origin_fork",
+      "firmware_origin_git",
+      "firmware_target",
+      "firmware_version",
+      "hardware_body",
+      "hardware_color",
+      "hardware_connect",
+      "hardware_display",
+      "hardware_model",
+      "hardware_name",
+      "hardware_otp_ver",
+      "hardware_region",
+      "hardware_region_provisioned",
+      "hardware_target",
+      "hardware_timestamp",
+      "hardware_uid",
+      "hardware_ver",
+      "protobuf_version_major",
+      "protobuf_version_minor",
+      "radio_alive",
+      "radio_ble_mac",
+      "radio_fus_flash",
+      "radio_fus_major",
+      "radio_fus_minor",
+      "radio_fus_sram2a",
+      "radio_fus_sram2b",
+      "radio_fus_sub",
+      "radio_mode",
+      "radio_stack_branch",
+      "radio_stack_flash",
+      "radio_stack_major",
+      "radio_stack_minor",
+      "radio_stack_release",
+      "radio_stack_sram1",
+      "radio_stack_sram2a",
+      "radio_stack_sram2b",
+      "radio_stack_sub",
+      "radio_stack_type",
+      "system_boot",
+      "system_debug",
+      "system_heap_track",
+      "system_locale_date",
+      "system_locale_time",
+      "system_locale_unit",
+      "system_lock",
+      "system_log_level",
+      "system_orient",
+      "system_sleep_legacy",
+      "system_stealth"
+    ]
+  }
+}

@@ -25,7 +25,18 @@ SCHEMA_VERSION = 1
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
 
+# Firmware-independent fixtures (no wire I/O) live flat in FIXTURES_DIR; hardware
+# fixtures whose recorded bytes differ by firmware live in a per-flavor subdir.
+OFFLINE_FIXTURES = ("cli_tx_gate_disabled", "wifi_cli_rejection")
+HARDWARE_FIXTURES = ("cli_exec_device_info", "fs_push_integrity", "lock_contention", "mode_switch")
+FIRMWARE_FLAVORS = ("momentum", "official")
+
 Direction = Literal["tx", "rx"]
+
+
+def hardware_dir(flavor: str) -> Path:
+    """Directory holding the hardware fixtures captured on one firmware flavor."""
+    return FIXTURES_DIR / flavor
 
 
 @dataclass

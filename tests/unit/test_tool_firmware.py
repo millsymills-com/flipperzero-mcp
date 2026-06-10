@@ -34,7 +34,7 @@ class FakeRPC:
         return data
 
     async def get_device_info(self):
-        return {"hardware_name": "Lun10n", "hardware_target": "7", "firmware_version": "1.2.3"}
+        return {"hardware_name": "TestFlipper", "hardware_target": "7", "firmware_version": "1.2.3"}
 
     async def storage_info(self, _path):
         return (1000, 500)
@@ -47,7 +47,7 @@ async def test_firmware_install_blocked_without_flag():
         with pytest.raises(ToolError, match="FLIPPER_ENABLE_FIRMWARE_FLASH"):
             await client.call_tool(
                 "flipperzero_firmware_install",
-                {"source": {"path": "/tmp/x.tgz"}, "confirm": "Lun10n"},  # noqa: S108
+                {"source": {"path": "/tmp/x.tgz"}, "confirm": "TestFlipper"},  # noqa: S108
             )
 
 
@@ -80,7 +80,7 @@ async def test_firmware_install_rejects_unknown_flavor(monkeypatch):
         with pytest.raises(ToolError, match="unknown flavor"):
             await client.call_tool(
                 "flipperzero_firmware_install",
-                {"source": {"flavor": "bogus"}, "confirm": "Lun10n"},
+                {"source": {"flavor": "bogus"}, "confirm": "TestFlipper"},
             )
 
 
@@ -92,7 +92,7 @@ async def test_firmware_install_rejects_source_without_path_or_flavor(monkeypatc
         with pytest.raises(ToolError, match=r"path.*flavor"):
             await client.call_tool(
                 "flipperzero_firmware_install",
-                {"source": {"channel": "release"}, "confirm": "Lun10n"},
+                {"source": {"channel": "release"}, "confirm": "TestFlipper"},
             )
 
 
@@ -104,7 +104,7 @@ class FakeRPCNoTarget:
         return data
 
     async def get_device_info(self):
-        return {"hardware_name": "Lun10n", "hardware_target": "", "firmware_version": "1.2.3"}
+        return {"hardware_name": "TestFlipper", "hardware_target": "", "firmware_version": "1.2.3"}
 
     async def storage_info(self, _path):
         return (1000, 500)
@@ -118,7 +118,7 @@ async def test_firmware_install_aborts_when_device_reports_no_target(monkeypatch
         with pytest.raises(ToolError, match="hardware target"):
             await client.call_tool(
                 "flipperzero_firmware_install",
-                {"source": {"flavor": "official"}, "confirm": "Lun10n"},
+                {"source": {"flavor": "official"}, "confirm": "TestFlipper"},
             )
 
 

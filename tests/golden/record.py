@@ -15,17 +15,60 @@ import asyncio
 import base64
 import hashlib
 import logging
+from typing import TYPE_CHECKING
 
-from tests.golden.harness import Fixture, RecordingTransport
+from tests.golden.harness import Fixture, RecordingTransport, hardware_dir
 
 from flipperzero_mcp.config import FlipperConfig
+from flipperzero_mcp.firmware.flavor import classify
 from flipperzero_mcp.rpc.client import FlipperClient, LinkMode
 from flipperzero_mcp.transport import get_transport
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping, Sequence
+    from pathlib import Path
+    from typing import Any
 
 logger = logging.getLogger("golden.record")
 
 _PROBE_PATH = "/ext/.golden_fixture_probe.bin"
 _PROBE_CONTENT = b"flipperzero-mcp golden fixture probe\n"
+
+# device_info fields that identify the capture device (hardware UID, BLE MAC,
+# user-set name). Their values are masked out of every fixture before it is
+# committed so the public test corpus carries no real hardware fingerprint.
+_SENSITIVE_DEVICE_FIELDS = ("hardware_uid", "radio_ble_mac", "hardware_name")
+
+
+def _device_secrets(info: Mapping[str, Any]) -> list[bytes]:
+    """The device-identifying field values to mask, longest first.
+
+    Longest-first so a value that is a substring of another (e.g. a BLE MAC
+    embedded in a UID) is masked before its superstring shrinks it.
+    """
+    values = [str(info[f]) for f in _SENSITIVE_DEVICE_FIELDS if info.get(f)]
+    return sorted((v.encode() for v in values), key=len, reverse=True)
+
+
+def _scrub_bytes(data: bytes, secrets: Sequence[bytes]) -> bytes:
+    for secret in secrets:
+        data = data.replace(secret, b"0" * len(secret))
+    return data
+
+
+def _redact_fixture(fixture: Fixture, secrets: Sequence[bytes]) -> Fixture:
+    """Mask device-identifying values in the wire events and the expected output.
+
+    Masks are equal-length so length-prefixed protobuf frames stay decodable.
+    """
+    if not secrets:
+        return fixture
+    for event in fixture.events:
+        event.data = _scrub_bytes(event.data, secrets)
+    output = fixture.expect.get("output")
+    if isinstance(output, str):
+        fixture.expect["output"] = _scrub_bytes(output.encode(), secrets).decode()
+    return fixture
 
 
 def _record_offline_fixtures() -> list[str]:
@@ -66,7 +109,7 @@ def _record_offline_fixtures() -> list[str]:
 
 
 async def _fresh_client() -> tuple[FlipperClient, RecordingTransport]:
-    cfg = FlipperConfig(_env_file=None, transport="usb")
+    cfg = FlipperConfig(_env_file=None, transport="usb")  # ty: ignore[unknown-argument]
     recorder = RecordingTransport(get_transport("usb", cfg.as_transport_config()))
     client = FlipperClient(recorder)
     if not await client.connect():
@@ -74,12 +117,7 @@ async def _fresh_client() -> tuple[FlipperClient, RecordingTransport]:
     return client, recorder
 
 
-async def _firmware(client: FlipperClient) -> str:
-    info = await client.get_device_info()
-    return str(info.get("firmware") or info.get("firmware_version") or "unknown")
-
-
-async def _record_cli_exec(firmware: str) -> str:
+async def _record_cli_exec(firmware: str, out_dir: Path, secrets: Sequence[bytes]) -> str:
     client, recorder = await _fresh_client()
     try:
         await client.enter_rpc()
@@ -99,17 +137,19 @@ async def _record_cli_exec(firmware: str) -> str:
         },
         session_pre_started=True,
     )
-    return str(fixture.save())
+    return str(_redact_fixture(fixture, secrets).save(out_dir))
 
 
-async def _record_fs_push(firmware: str) -> str:
+async def _record_fs_push(firmware: str, out_dir: Path, secrets: Sequence[bytes]) -> str:
     client, recorder = await _fresh_client()
     try:
         await client.enter_rpc()
+        rpc = client.rpc
+        assert rpc is not None
         recorder.clear()
-        wrote = await client.rpc.storage_write(_PROBE_PATH, _PROBE_CONTENT)
-        device_md5 = await client.rpc.storage_md5sum(_PROBE_PATH)
-        await client.rpc.storage_delete(_PROBE_PATH)
+        wrote = await rpc.storage_write(_PROBE_PATH, _PROBE_CONTENT)
+        device_md5 = await rpc.storage_md5sum(_PROBE_PATH)
+        await rpc.storage_delete(_PROBE_PATH)
     finally:
         await client.disconnect()
     local_md5 = hashlib.md5(_PROBE_CONTENT, usedforsecurity=False).hexdigest()
@@ -135,10 +175,10 @@ async def _record_fs_push(firmware: str) -> str:
         },
         session_pre_started=True,
     )
-    return str(fixture.save())
+    return str(_redact_fixture(fixture, secrets).save(out_dir))
 
 
-async def _record_mode_switch(firmware: str) -> str:
+async def _record_mode_switch(firmware: str, out_dir: Path, secrets: Sequence[bytes]) -> str:
     client, recorder = await _fresh_client()
     try:
         rpc_mode = await client.enter_rpc()
@@ -157,17 +197,19 @@ async def _record_mode_switch(firmware: str) -> str:
         },
         session_pre_started=False,
     )
-    return str(fixture.save())
+    return str(_redact_fixture(fixture, secrets).save(out_dir))
 
 
-async def _record_lock_contention(firmware: str) -> str:
+async def _record_lock_contention(firmware: str, out_dir: Path, secrets: Sequence[bytes]) -> str:
     client, recorder = await _fresh_client()
     try:
         await client.enter_rpc()
+        rpc = client.rpc
+        assert rpc is not None
         recorder.clear()
         first, second = await asyncio.gather(
-            client.rpc.get_device_info(),
-            client.rpc.get_device_info(),
+            rpc.get_device_info(),
+            rpc.get_device_info(),
         )
     finally:
         await client.disconnect()
@@ -182,7 +224,7 @@ async def _record_lock_contention(firmware: str) -> str:
         expect={"calls": 2, "device_info_keys": keys},
         session_pre_started=True,
     )
-    return str(fixture.save())
+    return str(_redact_fixture(fixture, secrets).save(out_dir))
 
 
 def _b64(data: bytes) -> str:
@@ -190,17 +232,24 @@ def _b64(data: bytes) -> str:
 
 
 async def record_hardware_fixtures() -> list[str]:
-    """Capture every hardware fixture; each uses its own fresh connection."""
+    """Capture every hardware fixture into the connected firmware's flavor dir."""
     probe, _ = await _fresh_client()
     try:
-        firmware = await _firmware(probe)
+        assert probe.rpc is not None
+        raw = await probe.rpc.get_device_info()
     finally:
         await probe.disconnect()
+    firmware = str(raw.get("firmware_version") or "unknown")
+    flavor = classify(raw).flavor.value
+    secrets = _device_secrets(raw)
+    out_dir = hardware_dir(flavor)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    logger.info("recording hardware fixtures for %s firmware (%s)", flavor, firmware)
     written: list[str] = []
-    written.append(await _record_cli_exec(firmware))
-    written.append(await _record_fs_push(firmware))
-    written.append(await _record_mode_switch(firmware))
-    written.append(await _record_lock_contention(firmware))
+    written.append(await _record_cli_exec(firmware, out_dir, secrets))
+    written.append(await _record_fs_push(firmware, out_dir, secrets))
+    written.append(await _record_mode_switch(firmware, out_dir, secrets))
+    written.append(await _record_lock_contention(firmware, out_dir, secrets))
     return written
 
 
