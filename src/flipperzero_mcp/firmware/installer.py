@@ -157,12 +157,15 @@ async def _push_file(
         The live RPC client, which ``resync`` may have replaced.
 
     Raises:
-        FlashError: If the digest never matches after the allotted reconnect
-            retries (a persistent mismatch points at a corrupt transfer; a
-            persistent unreadable digest points at an unrecoverable wedge).
+        FlashError: If the file cannot be landed after the allotted reconnect
+            retries. The message distinguishes the cause: a persistent write
+            rejection (the data never transferred), a persistent mismatch (a
+            corrupt transfer), or a persistent unreadable digest (an
+            unrecoverable session wedge).
     """
     expected = hashlib.md5(data, usedforsecurity=False).hexdigest()
     written = False
+    ever_written = False
     status: _Md5Status = "unreadable"
     for attempt in range(_RESYNC_ATTEMPTS + 1):
         if not written:
@@ -170,6 +173,7 @@ async def _push_file(
                 written = await rpc.storage_write(dest, data)
             except (OSError, RuntimeError, FlipperTimeoutError):
                 written = False
+            ever_written = ever_written or written
         if written:
             try:
                 status = await _verify_written(rpc, dest, data, expected)
@@ -188,6 +192,13 @@ async def _push_file(
             f"verification failed after writing {dest}; the on-device data does not "
             "match the bundle even after reconnecting - corrupt or truncated transfer, "
             "flash aborted"
+        )
+    if not ever_written:
+        raise FlashError(
+            f"device rejected the write of {dest} on every attempt; the data never "
+            "transferred to the SD card - check free space and that the storage is "
+            "mounted and writable, then retry (this is a write failure, not a session "
+            "wedge, so reconnecting will not help)"
         )
     raise FlashError(
         f"device RPC session stopped responding after writing {dest}; the update was "
