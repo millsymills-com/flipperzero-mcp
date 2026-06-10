@@ -17,7 +17,7 @@ import base64
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 from flipperzero_mcp.transport.base import FlipperTransport
 
@@ -54,7 +54,7 @@ class Event:
         direction = obj["dir"]
         if direction not in ("tx", "rx"):
             raise ValueError(f"invalid event direction: {direction!r}")
-        return cls(dir=direction, data=base64.b64decode(obj["b64"]))
+        return cls(dir=cast("Direction", direction), data=base64.b64decode(obj["b64"]))
 
 
 @dataclass
