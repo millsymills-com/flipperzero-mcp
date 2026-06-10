@@ -125,9 +125,10 @@ def register_firmware_tools(mcp: FastMCP) -> None:
 
         Returns:
             Dict with ``before`` and ``after`` firmware blocks, the bundle
-            target, and ``after_confirmed`` (True only if a post-reboot version
-            change was observed; False means ``after`` is best-effort and may
-            still reflect the pre-reboot image).
+            target, and ``after_confirmed`` (True only if a post-reboot
+            ``(version, flavor)`` identity change was observed against a known
+            baseline; False means ``after`` is best-effort and may still
+            reflect the pre-reboot image).
 
         Raises:
             ToolError: If flashing is disabled, the confirm token is wrong, the
