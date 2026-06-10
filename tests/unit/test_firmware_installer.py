@@ -63,7 +63,7 @@ class FakeRPC:
         self.rebooted = False
 
     async def get_device_info(self):
-        return {"hardware_target": self._target, "hardware_name": "Lun10n"}
+        return {"hardware_target": self._target, "hardware_name": "TestFlipper"}
 
     async def storage_mkdir(self, path):
         self.calls.append(f"mkdir:{path}")
