@@ -16,7 +16,11 @@ from flipperzero_mcp.firmware.installer import FlashError, install_bundle
 from flipperzero_mcp.tools._common import ensure_connected, get_rpc, require_firmware_flash
 
 _PKG_NAME = "mcp-update"
-_RECONNECT_BUDGET_S = 300.0
+# The device is off the bus while the on-device updater applies the bundle and
+# reboots. A larger firmware (Momentum's resources) was observed to re-enumerate
+# just past 300 s, so the old budget raised a false "did not reconnect" on an
+# update that had in fact succeeded; 600 s covers the slow apply.
+_RECONNECT_BUDGET_S = 600.0
 
 
 async def _resolve(source: dict[str, Any], target: str) -> Any:
