@@ -1126,25 +1126,16 @@ class ProtobufRPC:
     _WRITE_CHUNK_SIZE = 1024  # Bytes per RPC write frame; conservative for the Flipper serial link.
     # The device reassembles has_next fragments and acks only the final one, so
     # an unpaced multi-MB write floods USB CDC (~1.5 MB/s) far faster than the
-    # device drains to SD (~80 KB/s). The overrun wedges the RPC input path mid
-    # write and leaves stale bytes that break the next start_rpc_session. Pace
-    # fragment sends to the device's sustainable throughput to apply backpressure.
+    # device drains to SD (~80 KB/s). Pace fragment sends to the device's
+    # sustainable throughput to apply backpressure.
     _WRITE_THROUGHPUT_BYTES_S = 80_000
-    # A single write command has no intra-command flow control, so over a very
-    # large file (e.g. an 11 MB resources blob) an SD-write stall lets a backlog
-    # build until the device's RX buffer overruns. Send in bounded bursts and
-    # settle after each so any backlog fully drains before the next burst.
-    _WRITE_BURST_BYTES = 128 * 1024
-    _WRITE_BURST_SETTLE_S = 1.0
 
     async def storage_write(self, path: str, content: bytes) -> bool:
         async with self._io_lock:
             # Effective write+flush throughput over USB CDC is ~80 KB/s; a small
             # write right after a large one can take ~10 s to ack while the SD
-            # flushes, so budget a 15 s floor plus a conservative per-byte term,
-            # plus the per-burst settle overhead for large files.
-            settles = len(content) / self._WRITE_BURST_BYTES
-            timeout = max(15.0, len(content) / 40000.0 + settles * self._WRITE_BURST_SETTLE_S)
+            # flushes, so budget a 15 s floor plus a conservative per-byte term.
+            timeout = max(15.0, len(content) / 40000.0)
             try:
                 return await asyncio.wait_for(
                     self._storage_write_internal(path, content), timeout=timeout
@@ -1158,7 +1149,6 @@ class ProtobufRPC:
             await self._ensure_rpc_session_started()
             command_id = self._get_next_command_id()
             chunks = self._chunk(content, self._WRITE_CHUNK_SIZE)
-            sent_since_burst = 0
             for index, chunk in enumerate(chunks):
                 is_last = index == len(chunks) - 1
                 main_request = flipper_pb2.Main()
@@ -1179,10 +1169,6 @@ class ProtobufRPC:
                 # Backpressure: hold the host to the device's drain rate so the
                 # unacked fragment stream does not overrun and wedge the session.
                 await asyncio.sleep(len(framed) / self._WRITE_THROUGHPUT_BYTES_S)
-                sent_since_burst += len(framed)
-                if sent_since_burst >= self._WRITE_BURST_BYTES:
-                    await asyncio.sleep(self._WRITE_BURST_SETTLE_S)
-                    sent_since_burst = 0
             return False
         except Exception:
             logger.debug("_storage_write_internal failed", exc_info=True)
