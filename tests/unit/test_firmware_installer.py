@@ -7,10 +7,13 @@ import pytest
 
 from flipperzero_mcp.errors import FlipperTimeoutError
 from flipperzero_mcp.firmware.installer import (
+    _MD5_VERIFY_MAX_BYTES,
     FlashError,
     _check_md5,
+    _check_size,
     _push_file,
     _trigger_update,
+    _verify_written,
     install_bundle,
 )
 from flipperzero_mcp.rpc.protobuf_gen import system_pb2
@@ -90,6 +93,10 @@ class FakeRPC:
 
     async def storage_md5sum(self, path):
         return hashlib.md5(self.store[path], usedforsecurity=False).hexdigest()
+
+    async def storage_stat(self, path):
+        data = self.store.get(path)
+        return None if data is None else {"name": "", "type": "FILE", "size": len(data)}
 
     async def system_update(self, manifest_path):
         self.calls.append(f"update:{manifest_path}")
@@ -218,7 +225,7 @@ async def test_push_file_fails_on_persistent_md5_mismatch():
         resyncs += 1
         return BadMd5RPC()
 
-    with pytest.raises(FlashError, match="md5 mismatch"):
+    with pytest.raises(FlashError, match="does not match"):
         await _push_file(BadMd5RPC(), "/ext/update/x/f.bin", b"payload", resync=resync)
     assert resyncs == 2  # exhausted the reconnect retries before declaring mismatch
 
@@ -235,6 +242,40 @@ async def test_install_resyncs_and_resumes_after_wedge():
     await install_bundle(wedged, FakeBundle(), pkg_name="upd-test", resync=resync)
     assert healthy.rebooted is True
     assert wedged.rebooted is False
+
+
+@pytest.mark.asyncio
+async def test_check_size_classifies_match_mismatch_and_unreadable():
+    rpc = FakeRPC()
+    await rpc.storage_write("/ext/f.bin", b"abcdef")
+    assert await _check_size(rpc, "/ext/f.bin", 6) == "match"
+    assert await _check_size(rpc, "/ext/f.bin", 7) == "mismatch"
+    assert await _check_size(rpc, "/ext/missing.bin", 6) == "unreadable"
+
+
+@pytest.mark.asyncio
+async def test_verify_written_uses_size_for_large_files():
+    class NoMd5RPC(FakeRPC):
+        async def storage_md5sum(self, path):  # noqa: ARG002
+            raise AssertionError("md5sum must not be called for a large file")
+
+    rpc = NoMd5RPC()
+    big = b"x" * (_MD5_VERIFY_MAX_BYTES + 1)
+    await rpc.storage_write("/ext/big.bin", big)
+    assert await _verify_written(rpc, "/ext/big.bin", big, "ignored") == "match"
+
+
+@pytest.mark.asyncio
+async def test_push_file_verifies_large_file_by_size_without_md5():
+    class NoMd5RPC(FakeRPC):
+        async def storage_md5sum(self, path):  # noqa: ARG002
+            raise AssertionError("md5sum must not be called for a large file")
+
+    rpc = NoMd5RPC()
+    big = b"y" * (_MD5_VERIFY_MAX_BYTES + 10)
+    out = await _push_file(rpc, "/ext/update/x/big.bin", big, resync=None)
+    assert out is rpc
+    assert "write:/ext/update/x/big.bin" in rpc.calls
 
 
 class _UpdateCodeRPC(FakeRPC):

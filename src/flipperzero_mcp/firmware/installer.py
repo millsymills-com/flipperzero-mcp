@@ -19,6 +19,11 @@ _UPDATE_ROOT = "/ext/update"
 # to SD; retry across this many attempts with a settle delay before trusting it.
 _MD5_ATTEMPTS = 5
 _MD5_SETTLE_S = 2.0
+# storage_md5sum hashes the whole file on-device; for a multi-MB blob that is
+# slow (60-120 s for 11 MB) and wedges the session. Above this size, verify by
+# storage_stat size instead (immediate, no wedge) and let the device's own
+# update validation provide cryptographic integrity on apply.
+_MD5_VERIFY_MAX_BYTES = 2 * 1024 * 1024
 # A multi-MB storage_write transfers the data but can wedge the RPC session, so
 # the post-write digest reads back unreadable. The wedge clears on a transport
 # reconnect; reconnect and re-verify (without rewriting) this many times.
@@ -44,6 +49,7 @@ class _RPCLike(Protocol):
     async def storage_mkdir(self, path: str) -> bool: ...
     async def storage_write(self, path: str, content: bytes) -> bool: ...
     async def storage_md5sum(self, path: str) -> str | None: ...
+    async def storage_stat(self, path: str) -> dict[str, Any] | None: ...
     async def system_update(self, manifest_path: str) -> int: ...
     async def system_reboot_update(self) -> None: ...
 
@@ -58,7 +64,41 @@ class _Md5Reader(Protocol):
     async def storage_md5sum(self, path: str) -> str | None: ...
 
 
+class _StatReader(Protocol):
+    async def storage_stat(self, path: str) -> dict[str, Any] | None: ...
+
+
 _Resync = Callable[[], Awaitable["_RPCLike"]]
+
+
+async def _check_size(rpc: _StatReader, path: str, expected_len: int) -> _Md5Status:
+    """Verify a written file by its on-device size.
+
+    Used for files too large to md5sum reliably: ``storage_stat`` returns the
+    size immediately without hashing, so it neither stalls nor wedges the
+    session. A size match catches the dominant transfer failure (a truncated
+    push); cryptographic integrity is enforced by the device's update
+    validation when the bundle is applied.
+
+    Returns:
+        ``"match"`` if the on-device size equals ``expected_len``, ``"mismatch"``
+        if it differs, or ``"unreadable"`` if the file cannot be stat'd.
+    """
+    stat = await rpc.storage_stat(path)
+    if stat is None:
+        return "unreadable"
+    return "match" if stat.get("size") == expected_len else "mismatch"
+
+
+async def _verify_written(rpc: _RPCLike, dest: str, data: bytes, expected_md5: str) -> _Md5Status:
+    """Verify a freshly written file, choosing the check by size.
+
+    Small files use md5 (cryptographic); files above ``_MD5_VERIFY_MAX_BYTES``
+    use size, because hashing a multi-MB blob on-device is slow and wedge-prone.
+    """
+    if len(data) > _MD5_VERIFY_MAX_BYTES:
+        return await _check_size(rpc, dest, len(data))
+    return await _check_md5(rpc, dest, expected_md5)
 
 
 async def _check_md5(
@@ -95,7 +135,7 @@ async def _check_md5(
 async def _push_file(
     rpc: _RPCLike, dest: str, data: bytes, *, resync: _Resync | None
 ) -> _RPCLike:
-    """Write one file and confirm its on-device md5, recovering a wedged session.
+    """Write one file and verify it on-device, recovering a wedged session.
 
     A multi-MB ``storage_write`` transfers the data and acks it, but then wedges
     the RPC session so the immediate digest reads back ``None`` or garbage. A
@@ -132,7 +172,7 @@ async def _push_file(
                 written = False
         if written:
             try:
-                status = await _check_md5(rpc, dest, expected)
+                status = await _verify_written(rpc, dest, data, expected)
             except (OSError, RuntimeError, FlipperTimeoutError):
                 status = "unreadable"  # write wedged the session; verify after reconnect
             if status == "match":
@@ -145,8 +185,9 @@ async def _push_file(
         await asyncio.sleep(_POST_WRITE_SETTLE_S)
     if status == "mismatch":
         raise FlashError(
-            f"md5 mismatch after writing {dest}; the on-device data does not match "
-            "the bundle even after reconnecting - corrupt transfer, flash aborted"
+            f"verification failed after writing {dest}; the on-device data does not "
+            "match the bundle even after reconnecting - corrupt or truncated transfer, "
+            "flash aborted"
         )
     raise FlashError(
         f"device RPC session stopped responding after writing {dest}; the update was "
