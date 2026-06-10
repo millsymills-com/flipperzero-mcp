@@ -1,0 +1,31 @@
+{
+  "device": {
+    "name": "Lun10n",
+    "firmware": {
+      "flavor": "momentum",
+      "version": "mntm-012",
+      "origin_fork": "Momentum",
+      "origin_git": "https://github.com/Next-Flip/Momentum-Firmware",
+      "target": "f7"
+    },
+    "sd": true
+  },
+  "push": {
+    "dest_path": "/ext/apps/Media/tuning_fork.fap",
+    "bytes": 24712,
+    "md5": "de43b1370d3a30b095d485b6cbd529f2",
+    "verified": true
+  },
+  "listed": [
+    {
+      "name": "tuning_fork.fap",
+      "type": "FILE",
+      "size": 24712
+    }
+  ],
+  "launch": {
+    "name": "/ext/apps/Media/tuning_fork.fap",
+    "args": "",
+    "started": true
+  }
+}
