@@ -139,6 +139,9 @@ Prompts:
 
 - `manage_flipper`
 - `troubleshoot_connection`
+- `flipper_install` — the `/flipper-install <github_url>` flagship: clone → ufbt
+  build matched to the device firmware → md5-verified push → launch.
+- `flipper_doctor` — the `/flipper-doctor` end-to-end connection/device diagnostic sweep.
 
 ## Development
 
