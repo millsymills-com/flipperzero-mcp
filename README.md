@@ -16,7 +16,10 @@ Device-mutating storage/app operations are gated behind
 `FLIPPER_ENABLE_WRITE_TOOLS` and transmit/destructive CLI commands behind
 `FLIPPER_ENABLE_TX_TOOLS`, both default-off. CI runs lint and tests on the
 committed lockfile. The `/flipper-install` flagship and live integration suite
-are the S3 climb tracked in the public-launch issues (#37 umbrella).
+are the S3 climb tracked in the public-launch issues (#37 umbrella). The
+flagship was validated end-to-end on hardware (clone → ufbt build → md5-verified
+push → launch) — see
+[`docs/proof/2026-06-10-flipper-install.md`](docs/proof/2026-06-10-flipper-install.md).
 
 ## Features
 
