@@ -89,7 +89,23 @@ async def test_large_write_paces_fragments_to_device_throughput(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_single_frame_write_is_not_paced(monkeypatch):
+async def test_large_write_inserts_burst_settles(monkeypatch):
+    slept: list[float] = []
+
+    async def _record(seconds):
+        slept.append(seconds)
+
+    monkeypatch.setattr("flipperzero_mcp.rpc.protobuf_rpc.asyncio.sleep", _record)
+    transport = RecordingTransport()
+    rpc = ProtobufRPC(transport)  # ty: ignore[invalid-argument-type]
+    rpc._rpc_session_started = True
+    # Two-and-a-bit bursts so the burst settle fires after each full burst.
+    content = b"Z" * (2 * rpc._WRITE_BURST_BYTES + 5000)
+
+    assert await rpc.storage_write("/ext/huge.bin", content) is True
+
+    burst_settles = [s for s in slept if s == rpc._WRITE_BURST_SETTLE_S]
+    assert len(burst_settles) == 2  # one drain window per completed burst
     slept: list[float] = []
 
     async def _record(seconds):
