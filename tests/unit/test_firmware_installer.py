@@ -210,6 +210,23 @@ async def test_push_file_fails_closed_when_resync_never_recovers():
 
 
 @pytest.mark.asyncio
+async def test_push_file_reports_write_rejection_distinctly_from_wedge():
+    # storage_write that returns False on every attempt never lands the data, so
+    # the failure is a write rejection (reconnecting will not help), not a
+    # session wedge - the message must say so rather than advise a reconnect.
+    class RejectWriteRPC(FakeRPC):
+        async def storage_write(self, path, content):  # noqa: ARG002
+            return False
+
+    async def resync():
+        return RejectWriteRPC()
+
+    with pytest.raises(FlashError, match="never transferred") as excinfo:
+        await _push_file(RejectWriteRPC(), "/ext/update/x/f.bin", b"payload", resync=resync)
+    assert "not a session wedge" in str(excinfo.value)
+
+
+@pytest.mark.asyncio
 async def test_push_file_fails_on_persistent_md5_mismatch():
     # A wedged session can return a garbage (non-None, wrong) digest, so a single
     # mismatch is not trusted - it is re-verified after a reconnect. A mismatch
