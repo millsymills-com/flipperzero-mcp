@@ -23,6 +23,10 @@ _MD5_SETTLE_S = 2.0
 # the post-write digest reads back unreadable. The wedge clears on a transport
 # reconnect; reconnect and re-verify (without rewriting) this many times.
 _RESYNC_ATTEMPTS = 2
+# After reconnecting from a large-write wedge, the device needs a moment to be
+# ready to negotiate a new RPC session (past the negotiation cooldown) before
+# the re-verify; settle this long so the fresh session's first call succeeds.
+_POST_WRITE_SETTLE_S = 8.0
 # system_update issued right after the final large write can return a transient
 # UnspecifiedError while the device is still settling; settle this long before
 # (re)trying the update trigger.
@@ -93,13 +97,14 @@ async def _push_file(
 ) -> _RPCLike:
     """Write one file and confirm its on-device md5, recovering a wedged session.
 
-    A multi-MB ``storage_write`` transfers the data correctly but can wedge the
-    RPC session, after which ``storage_md5sum`` reads back ``None`` or a garbage
-    digest. The wedge clears on a transport reconnect, after which the
-    already-written data verifies, so a non-matching digest is treated as
-    untrusted: ``resync`` and re-verify on the fresh session *without* rewriting
-    (a fresh write would just re-wedge). Only a digest that keeps disagreeing
-    after a clean reconnect is a real mismatch.
+    A multi-MB ``storage_write`` transfers the data and acks it, but then wedges
+    the RPC session so the immediate digest reads back ``None`` or garbage. A
+    successful write means the data is durably on the SD card, so on a wedge the
+    file is *not* rewritten (a rewrite just re-wedges and, for an 11 MB blob,
+    wastes minutes): instead ``resync`` reconnects, settles past the negotiation
+    cooldown, and re-verifies the existing data. Only a write that itself fails
+    is re-sent, and only a digest that keeps disagreeing after a clean reconnect
+    is a real mismatch.
 
     Args:
         rpc: Live RPC client.
@@ -117,24 +122,27 @@ async def _push_file(
             persistent unreadable digest points at an unrecoverable wedge).
     """
     expected = hashlib.md5(data, usedforsecurity=False).hexdigest()
+    written = False
     status: _Md5Status = "unreadable"
     for attempt in range(_RESYNC_ATTEMPTS + 1):
-        try:
-            await rpc.storage_write(dest, data)
-            status = await _check_md5(rpc, dest, expected)
-        except (OSError, RuntimeError, FlipperTimeoutError):
-            status = "unreadable"  # link wedged mid-write; verify after reconnect
-        if status == "match":
-            return rpc
+        if not written:
+            try:
+                written = await rpc.storage_write(dest, data)
+            except (OSError, RuntimeError, FlipperTimeoutError):
+                written = False
+        if written:
+            try:
+                status = await _check_md5(rpc, dest, expected)
+            except (OSError, RuntimeError, FlipperTimeoutError):
+                status = "unreadable"  # write wedged the session; verify after reconnect
+            if status == "match":
+                return rpc
+            if status == "mismatch":
+                written = False  # on-disk data disagrees; re-push on the next pass
         if resync is None or attempt == _RESYNC_ATTEMPTS:
             break
         rpc = await resync()
-        try:
-            status = await _check_md5(rpc, dest, expected)
-        except (OSError, RuntimeError, FlipperTimeoutError):
-            status = "unreadable"
-        if status == "match":
-            return rpc  # data landed; only the stale session was wedged
+        await asyncio.sleep(_POST_WRITE_SETTLE_S)
     if status == "mismatch":
         raise FlashError(
             f"md5 mismatch after writing {dest}; the on-device data does not match "
