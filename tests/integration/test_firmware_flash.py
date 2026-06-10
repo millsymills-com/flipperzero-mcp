@@ -3,13 +3,16 @@
 Destructive and slow: each flash pushes a full update bundle, reboots the
 device into the on-device updater, and waits for it to come back (minutes per
 direction). Guarded behind ``FLIPPER_RUN_FLASH_TEST`` so it never runs as part
-of the ordinary ``integration``/``usb`` sweep. The test restores the device to
-the firmware flavor it started on, so it leaves no net change.
+of the ordinary ``integration``/``usb`` sweep. The test always attempts to
+flash back to the starting flavor, even when the forward flash fails, so a
+green or assertion-failed run leaves no net change; only a wedged device can
+strand the swap.
 """
 
 from __future__ import annotations
 
 import os
+from typing import Any
 
 import pytest
 from fastmcp import Client
@@ -41,7 +44,7 @@ async def _read_identity() -> tuple[str, FirmwareFlavor]:
     return name, flavor
 
 
-async def _flash(client: Client, flavor: str, confirm: str) -> dict:
+async def _flash(client: Client, flavor: str, confirm: str) -> dict[str, Any]:
     source = {"flavor": flavor, "channel": "release", "version": "latest"}
     result = await client.call_tool(
         "flipperzero_firmware_install", {"source": source, "confirm": confirm}
@@ -65,10 +68,11 @@ async def test_usb_firmware_flash_roundtrip():
         enable_firmware_flash=True,
     )
     async with Client(create_server(cfg)) as client:
-        forward = await _flash(client, other, name)
-        assert forward["after_confirmed"] is True
-        assert forward["after"]["flavor"] == other
-
-        back = await _flash(client, origin.value, name)
+        try:
+            forward = await _flash(client, other, name)
+            assert forward["after_confirmed"] is True
+            assert forward["after"]["flavor"] == other
+        finally:
+            back = await _flash(client, origin.value, name)
         assert back["after_confirmed"] is True
         assert back["after"]["flavor"] == origin.value
