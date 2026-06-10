@@ -151,8 +151,15 @@ async def test_firmware_install_fails_closed_when_hardware_name_missing(monkeypa
             )
 
 
-def _info(version: str):
-    return {"hardware_target": "7", "firmware_version": version}
+def _info(version: str, origin_git: str | None = None):
+    info = {"hardware_target": "7", "firmware_version": version}
+    if origin_git is not None:
+        info["firmware_origin_git"] = origin_git
+    return info
+
+
+_OFFICIAL_GIT = "https://github.com/flipperdevices/flipperzero-firmware.git"
+_MOMENTUM_GIT = "https://github.com/next-flip/momentum-firmware.git"
 
 
 class FakeReconnectClient:
@@ -172,6 +179,37 @@ class FakeReconnectClient:
     async def get_device_info(self):
         assert self._info is not None
         return self._info
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("confirmed", [True, False])
+async def test_firmware_install_propagates_after_confirmed(monkeypatch, confirmed):
+    monkeypatch.setattr("flipperzero_mcp.server.get_transport", lambda _t, _c: FakeTransport())
+    monkeypatch.setattr("flipperzero_mcp.rpc.client.ProtobufRPC", FakeRPC)
+
+    class _Bundle:
+        target = "f7"
+
+    async def _fake_resolve(_source, _target):
+        return _Bundle()
+
+    async def _fake_install(*_args, **_kwargs):
+        return None
+
+    async def _fake_reconnect(_client, _before):
+        return classify(_info("2.0.0", _MOMENTUM_GIT)), confirmed
+
+    monkeypatch.setattr("flipperzero_mcp.tools.firmware._resolve", _fake_resolve)
+    monkeypatch.setattr("flipperzero_mcp.tools.firmware.install_bundle", _fake_install)
+    monkeypatch.setattr("flipperzero_mcp.tools.firmware._reconnect_and_classify", _fake_reconnect)
+
+    async with Client(_firmware_flash_server()) as client:
+        result = await client.call_tool(
+            "flipperzero_firmware_install",
+            {"source": {"flavor": "momentum"}, "confirm": "TestFlipper"},
+        )
+    assert result.data["after_confirmed"] is confirmed
+    assert result.data["target"] == "f7"
 
 
 @pytest.fixture
@@ -201,6 +239,26 @@ async def test_reconnect_best_effort_when_version_never_changes(monkeypatch):
     after, confirmed = await _reconnect_and_classify(client, before)
     assert confirmed is False
     assert after.version == "1.2.3"
+
+
+@pytest.mark.asyncio
+@pytest.mark.usefixtures("_no_sleep")
+async def test_reconnect_confirms_on_same_version_fork_swap():
+    before = classify(_info("1.2.3", _OFFICIAL_GIT))
+    client = FakeReconnectClient([_info("1.2.3", _OFFICIAL_GIT), _info("1.2.3", _MOMENTUM_GIT)])
+    after, confirmed = await _reconnect_and_classify(client, before)
+    assert confirmed is True
+    assert after.flavor.value == "momentum"
+
+
+@pytest.mark.asyncio
+@pytest.mark.usefixtures("_no_sleep")
+async def test_reconnect_best_effort_on_same_version_same_flavor(monkeypatch):
+    monkeypatch.setattr("flipperzero_mcp.tools.firmware._RECONNECT_BUDGET_S", 15.0)
+    before = classify(_info("1.2.3", _MOMENTUM_GIT))
+    client = FakeReconnectClient([_info("1.2.3", _MOMENTUM_GIT)] * 3)
+    _, confirmed = await _reconnect_and_classify(client, before)
+    assert confirmed is False
 
 
 @pytest.mark.asyncio

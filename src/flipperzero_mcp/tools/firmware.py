@@ -42,13 +42,20 @@ async def _reconnect_and_classify(client: Any, before: Any) -> tuple[Any, bool]:
 
     ``system_reboot_update`` is fire-and-forget, so an early reconnect can land
     before the device boots the new image and still read the old firmware.
-    Prefer a reading whose version differs from ``before``; fall back to the
-    last successful reading (best-effort) once the budget is exhausted.
+    Prefer a reading whose ``(version, flavor)`` identity differs from
+    ``before``; fall back to the last successful reading (best-effort) once the
+    budget is exhausted.
+
+    Gating on ``(version, flavor)`` rather than version alone confirms a
+    same-version fork swap (e.g. Official -> Momentum at a matching version),
+    which a version-only check misses. A same-version, same-flavor reflash
+    leaves no observable identity change, so it stays best-effort.
 
     Returns:
         ``(classification, confirmed)`` where ``confirmed`` is True only if a
-        post-reboot version change was observed.
+        post-reboot identity change was observed against a known baseline.
     """
+    before_identity = (before.version, before.flavor)
     waited = 0.0
     last = None
     while waited < _RECONNECT_BUDGET_S:
@@ -61,7 +68,7 @@ async def _reconnect_and_classify(client: Any, before: Any) -> tuple[Any, bool]:
             last = classify(await client.get_device_info())
         except (OSError, RuntimeError, ValueError):
             continue  # device still settling; keep polling
-        if last.version != before.version:
+        if before.version is not None and (last.version, last.flavor) != before_identity:
             return last, True
     if last is not None:
         return last, False
