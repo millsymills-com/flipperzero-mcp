@@ -37,18 +37,34 @@ async def _resolve(source: dict[str, Any], target: str) -> Any:
     )
 
 
-async def _reconnect_and_classify(client: Any) -> Any:
-    """Poll for the device to come back after the update reboot."""
+async def _reconnect_and_classify(client: Any, before: Any) -> tuple[Any, bool]:
+    """Poll for the device to come back after the update reboot.
+
+    ``system_reboot_update`` is fire-and-forget, so an early reconnect can land
+    before the device boots the new image and still read the old firmware.
+    Prefer a reading whose version differs from ``before``; fall back to the
+    last successful reading (best-effort) once the budget is exhausted.
+
+    Returns:
+        ``(classification, confirmed)`` where ``confirmed`` is True only if a
+        post-reboot version change was observed.
+    """
     waited = 0.0
+    last = None
     while waited < _RECONNECT_BUDGET_S:
         await asyncio.sleep(5.0)
         waited += 5.0
         await client.disconnect()
-        if await client.connect():
-            try:
-                return classify(await client.get_device_info())
-            except (OSError, RuntimeError, ValueError):
-                continue  # device still settling; keep polling
+        if not await client.connect():
+            continue
+        try:
+            last = classify(await client.get_device_info())
+        except (OSError, RuntimeError, ValueError):
+            continue  # device still settling; keep polling
+        if last.version != before.version:
+            return last, True
+    if last is not None:
+        return last, False
     raise ToolError(
         "device did not reconnect after the update; it may still be applying or "
         "may have dropped to DFU - recover with qFlipper if it does not return"
@@ -79,7 +95,10 @@ def register_firmware_tools(mcp: FastMCP) -> None:
             confirm: Must equal the connected device's name (a safety interlock).
 
         Returns:
-            Dict with ``before`` and ``after`` firmware blocks and the bundle target.
+            Dict with ``before`` and ``after`` firmware blocks, the bundle
+            target, and ``after_confirmed`` (True only if a post-reboot version
+            change was observed; False means ``after`` is best-effort and may
+            still reflect the pre-reboot image).
 
         Raises:
             ToolError: If flashing is disabled, the confirm token is wrong, the
@@ -109,9 +128,10 @@ def register_firmware_tools(mcp: FastMCP) -> None:
         except (BundleError, FlashError) as e:
             raise ToolError(str(e)) from e
 
-        after = await _reconnect_and_classify(client)
+        after, after_confirmed = await _reconnect_and_classify(client, before)
         return {
             "before": {"flavor": before.flavor.value, "version": before.version},
             "after": {"flavor": after.flavor.value, "version": after.version},
+            "after_confirmed": after_confirmed,
             "target": bundle.target,
         }
