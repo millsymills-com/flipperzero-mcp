@@ -347,6 +347,8 @@ class ProtobufRPC:
     async def _send_rpc_message(
         self,
         main_message: Any,  # flipper_pb2.Main
+        *,
+        response_timeout: float = 2.5,
     ) -> Any | None:  # Optional[flipper_pb2.Main]
         """
         Send a protobuf RPC message and receive response.
@@ -357,6 +359,10 @@ class ProtobufRPC:
 
         Args:
             main_message: Main protobuf message to send
+            response_timeout: Max seconds to wait for the response frame. The
+                2.5 s default suits quick commands; long device-side work (e.g.
+                hashing a multi-MB file) needs a larger value or the response is
+                missed and the call reads as a failure.
 
         Returns:
             Main response message or None
@@ -374,7 +380,7 @@ class ProtobufRPC:
             await self.transport.send(message)
 
             # Receive one response Main message
-            return await self._receive_main_message(timeout=2.5)
+            return await self._receive_main_message(timeout=response_timeout)
 
         except Exception:
             logger.debug("_send_rpc_message failed", exc_info=True)
@@ -1070,6 +1076,11 @@ class ProtobufRPC:
             logger.debug("_storage_rename_internal failed", exc_info=True)
             return False
 
+    # The device hashes the whole file before replying, so a multi-MB file can
+    # take far longer than a quick command; an 11 MB blob takes 60-120 s and
+    # varies with SD state, so allow generous headroom.
+    _MD5SUM_RESPONSE_TIMEOUT_S = 180.0
+
     async def storage_md5sum(self, path: str) -> str | None:
         """Compute the device-side MD5 of a file via storage_md5sum_request.
 
@@ -1081,7 +1092,10 @@ class ProtobufRPC:
         """
         async with self._io_lock:
             try:
-                return await asyncio.wait_for(self._storage_md5sum_internal(path), timeout=10.0)
+                return await asyncio.wait_for(
+                    self._storage_md5sum_internal(path),
+                    timeout=self._MD5SUM_RESPONSE_TIMEOUT_S + 5.0,
+                )
             except Exception:
                 logger.debug("storage_md5sum(%s) timed out or failed", path, exc_info=True)
                 return None
@@ -1096,7 +1110,9 @@ class ProtobufRPC:
             req.path = path
             main_request.storage_md5sum_request.CopyFrom(req)
 
-            main_response = await self._send_rpc_message(main_request)
+            main_response = await self._send_rpc_message(
+                main_request, response_timeout=self._MD5SUM_RESPONSE_TIMEOUT_S
+            )
             if (
                 main_response
                 and main_response.command_status == flipper_pb2.CommandStatus.OK
@@ -1108,6 +1124,11 @@ class ProtobufRPC:
         return None
 
     _WRITE_CHUNK_SIZE = 1024  # Bytes per RPC write frame; conservative for the Flipper serial link.
+    # The device reassembles has_next fragments and acks only the final one, so
+    # an unpaced multi-MB write floods USB CDC (~1.5 MB/s) far faster than the
+    # device drains to SD (~80 KB/s). Pace fragment sends to the device's
+    # sustainable throughput to apply backpressure.
+    _WRITE_THROUGHPUT_BYTES_S = 80_000
 
     async def storage_write(self, path: str, content: bytes) -> bool:
         async with self._io_lock:
@@ -1145,6 +1166,9 @@ class ProtobufRPC:
                     return bool(
                         response and response.command_status == flipper_pb2.CommandStatus.OK
                     )
+                # Backpressure: hold the host to the device's drain rate so the
+                # unacked fragment stream does not overrun and wedge the session.
+                await asyncio.sleep(len(framed) / self._WRITE_THROUGHPUT_BYTES_S)
             return False
         except Exception:
             logger.debug("_storage_write_internal failed", exc_info=True)

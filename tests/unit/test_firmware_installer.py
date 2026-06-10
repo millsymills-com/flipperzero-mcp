@@ -6,8 +6,25 @@ from typing import ClassVar
 import pytest
 
 from flipperzero_mcp.errors import FlipperTimeoutError
-from flipperzero_mcp.firmware.installer import FlashError, _verify_md5, install_bundle
+from flipperzero_mcp.firmware.installer import (
+    _MD5_VERIFY_MAX_BYTES,
+    FlashError,
+    _check_md5,
+    _check_size,
+    _push_file,
+    _trigger_update,
+    _verify_written,
+    install_bundle,
+)
 from flipperzero_mcp.rpc.protobuf_gen import system_pb2
+
+
+@pytest.fixture(autouse=True)
+def _no_settle(monkeypatch):
+    async def _instant(_seconds):
+        return None
+
+    monkeypatch.setattr("flipperzero_mcp.firmware.installer.asyncio.sleep", _instant)
 
 
 class _Md5RPC:
@@ -25,23 +42,23 @@ class _Md5RPC:
 
 
 @pytest.mark.asyncio
-async def test_verify_md5_retries_while_digest_unreadable():
+async def test_check_md5_matches_after_digest_becomes_readable():
     rpc = _Md5RPC([None, None, "abc"])
-    assert await _verify_md5(rpc, "/ext/x", "abc", settle_s=0.0) is True
+    assert await _check_md5(rpc, "/ext/x", "abc", settle_s=0.0) == "match"
     assert rpc.calls == 3
 
 
 @pytest.mark.asyncio
-async def test_verify_md5_fails_immediately_on_definitive_mismatch():
+async def test_check_md5_reports_mismatch_immediately():
     rpc = _Md5RPC(["deadbeef", "abc"])
-    assert await _verify_md5(rpc, "/ext/x", "abc", settle_s=0.0) is False
+    assert await _check_md5(rpc, "/ext/x", "abc", settle_s=0.0) == "mismatch"
     assert rpc.calls == 1  # did not retry past a non-None mismatch
 
 
 @pytest.mark.asyncio
-async def test_verify_md5_gives_up_if_digest_never_readable():
+async def test_check_md5_reports_unreadable_when_digest_never_returns():
     rpc = _Md5RPC([None, None, None, None, None])
-    assert await _verify_md5(rpc, "/ext/x", "abc", settle_s=0.0) is False
+    assert await _check_md5(rpc, "/ext/x", "abc", settle_s=0.0) == "unreadable"
     assert rpc.calls == 5
 
 
@@ -76,6 +93,10 @@ class FakeRPC:
 
     async def storage_md5sum(self, path):
         return hashlib.md5(self.store[path], usedforsecurity=False).hexdigest()
+
+    async def storage_stat(self, path):
+        data = self.store.get(path)
+        return None if data is None else {"name": "", "type": "FILE", "size": len(data)}
 
     async def system_update(self, manifest_path):
         self.calls.append(f"update:{manifest_path}")
@@ -129,3 +150,198 @@ async def test_install_wraps_link_drop_during_update_as_flash_error():
     with pytest.raises(FlashError, match="link dropped"):
         await install_bundle(rpc, FakeBundle(), pkg_name="upd-test")
     assert rpc.rebooted is False
+
+
+@pytest.mark.asyncio
+async def test_install_aborts_when_session_wedges_with_no_resync():
+    # A wedged session leaves the post-write digest unreadable; with no resync
+    # hook there is no recovery, so the flash must fail closed before reboot.
+    rpc = _WedgeRPC()
+    with pytest.raises(FlashError, match="stopped responding"):
+        await install_bundle(rpc, FakeBundle(), pkg_name="upd-test")
+    assert rpc.rebooted is False
+
+
+class _WedgeRPC(FakeRPC):
+    """FakeRPC modelling a wedged session: the digest reads unreadable.
+
+    ``store`` is shared across instances to model a single SD card surviving
+    reconnects, so a file written on a wedged session verifies on a fresh one.
+    """
+
+    def __init__(self, *, alive=False, store=None):
+        super().__init__()
+        self.alive = alive
+        if store is not None:
+            self.store = store
+
+    async def storage_md5sum(self, path):
+        if not self.alive:
+            return None  # wedged: digest unreadable until the session is re-synced
+        return await super().storage_md5sum(path)
+
+
+@pytest.mark.asyncio
+async def test_push_file_recovers_by_verifying_after_resync():
+    shared: dict[str, bytes] = {}
+    wedged = _WedgeRPC(store=shared)
+    healthy = _WedgeRPC(alive=True, store=shared)
+
+    async def resync():
+        return healthy
+
+    out = await _push_file(wedged, "/ext/update/x/f.bin", b"payload", resync=resync)
+    assert out is healthy
+    # The data was written once on the wedged session and verified after the
+    # reconnect; it was not rewritten on the healthy session.
+    assert "write:/ext/update/x/f.bin" in wedged.calls
+    assert "write:/ext/update/x/f.bin" not in healthy.calls
+
+
+@pytest.mark.asyncio
+async def test_push_file_fails_closed_when_resync_never_recovers():
+    shared: dict[str, bytes] = {}
+
+    async def resync():
+        return _WedgeRPC(store=shared)  # every fresh session is still wedged
+
+    with pytest.raises(FlashError, match="stopped responding"):
+        await _push_file(_WedgeRPC(store=shared), "/ext/update/x/f.bin", b"x", resync=resync)
+
+
+@pytest.mark.asyncio
+async def test_push_file_fails_on_persistent_md5_mismatch():
+    # A wedged session can return a garbage (non-None, wrong) digest, so a single
+    # mismatch is not trusted - it is re-verified after a reconnect. A mismatch
+    # that survives every reconnect is a real corrupt transfer and fails closed.
+    class BadMd5RPC(FakeRPC):
+        async def storage_md5sum(self, path):  # noqa: ARG002
+            return "deadbeef"  # never the expected digest, even on a fresh session
+
+    resyncs = 0
+
+    async def resync():
+        nonlocal resyncs
+        resyncs += 1
+        return BadMd5RPC()
+
+    with pytest.raises(FlashError, match="does not match"):
+        await _push_file(BadMd5RPC(), "/ext/update/x/f.bin", b"payload", resync=resync)
+    assert resyncs == 2  # exhausted the reconnect retries before declaring mismatch
+
+
+@pytest.mark.asyncio
+async def test_install_resyncs_and_resumes_after_wedge():
+    shared: dict[str, bytes] = {}
+    wedged = _WedgeRPC(store=shared)  # first session wedges (digest unreadable)
+    healthy = _WedgeRPC(alive=True, store=shared)  # reconnect lands a live session
+
+    async def resync():
+        return healthy
+
+    await install_bundle(wedged, FakeBundle(), pkg_name="upd-test", resync=resync)
+    assert healthy.rebooted is True
+    assert wedged.rebooted is False
+
+
+@pytest.mark.asyncio
+async def test_check_size_classifies_match_mismatch_and_unreadable():
+    rpc = FakeRPC()
+    await rpc.storage_write("/ext/f.bin", b"abcdef")
+    assert await _check_size(rpc, "/ext/f.bin", 6) == "match"
+    assert await _check_size(rpc, "/ext/f.bin", 7) == "mismatch"
+    assert await _check_size(rpc, "/ext/missing.bin", 6) == "unreadable"
+
+
+@pytest.mark.asyncio
+async def test_verify_written_uses_size_for_large_files():
+    class NoMd5RPC(FakeRPC):
+        async def storage_md5sum(self, path):  # noqa: ARG002
+            raise AssertionError("md5sum must not be called for a large file")
+
+    rpc = NoMd5RPC()
+    big = b"x" * (_MD5_VERIFY_MAX_BYTES + 1)
+    await rpc.storage_write("/ext/big.bin", big)
+    assert await _verify_written(rpc, "/ext/big.bin", big, "ignored") == "match"
+
+
+@pytest.mark.asyncio
+async def test_push_file_verifies_large_file_by_size_without_md5():
+    class NoMd5RPC(FakeRPC):
+        async def storage_md5sum(self, path):  # noqa: ARG002
+            raise AssertionError("md5sum must not be called for a large file")
+
+    rpc = NoMd5RPC()
+    big = b"y" * (_MD5_VERIFY_MAX_BYTES + 10)
+    out = await _push_file(rpc, "/ext/update/x/big.bin", big, resync=None)
+    assert out is rpc
+    assert "write:/ext/update/x/big.bin" in rpc.calls
+
+
+class _UpdateCodeRPC(FakeRPC):
+    """Returns a scripted sequence of system_update codes."""
+
+    def __init__(self, codes):
+        super().__init__()
+        self._codes = list(codes)
+
+    async def system_update(self, manifest_path):  # noqa: ARG002
+        return self._codes.pop(0)
+
+
+@pytest.mark.asyncio
+async def test_trigger_update_returns_on_ok():
+    rpc = _UpdateCodeRPC([system_pb2.UpdateResponse.OK])
+    assert await _trigger_update(rpc, "/m.fuf", resync=None) is rpc
+
+
+@pytest.mark.asyncio
+async def test_trigger_update_retries_transient_unspecified_then_succeeds():
+    first = _UpdateCodeRPC([system_pb2.UpdateResponse.UnspecifiedError])
+    healthy = _UpdateCodeRPC([system_pb2.UpdateResponse.OK])
+    resyncs = 0
+
+    async def resync():
+        nonlocal resyncs
+        resyncs += 1
+        return healthy
+
+    out = await _trigger_update(first, "/m.fuf", resync=resync)
+    assert out is healthy
+    assert resyncs == 1
+
+
+@pytest.mark.asyncio
+async def test_trigger_update_fails_on_persistent_unspecified():
+    rpc = _UpdateCodeRPC([system_pb2.UpdateResponse.UnspecifiedError] * 3)
+
+    async def resync():
+        return rpc
+
+    with pytest.raises(FlashError, match="unspecified update error"):
+        await _trigger_update(rpc, "/m.fuf", resync=resync)
+
+
+@pytest.mark.asyncio
+async def test_trigger_update_fails_immediately_on_specific_code():
+    resyncs = 0
+
+    async def resync():
+        nonlocal resyncs
+        resyncs += 1
+        return rpc
+
+    rpc = _UpdateCodeRPC([system_pb2.UpdateResponse.ManifestInvalid])
+    with pytest.raises(FlashError, match="manifest"):
+        await _trigger_update(rpc, "/m.fuf", resync=resync)
+    assert resyncs == 0  # a definitive rejection is not retried
+
+
+@pytest.mark.asyncio
+async def test_trigger_update_wraps_link_drop():
+    class LinkDropRPC(FakeRPC):
+        async def system_update(self, manifest_path):  # noqa: ARG002
+            raise FlipperTimeoutError("no response to system_update")
+
+    with pytest.raises(FlashError, match="link dropped"):
+        await _trigger_update(LinkDropRPC(), "/m.fuf", resync=None)
