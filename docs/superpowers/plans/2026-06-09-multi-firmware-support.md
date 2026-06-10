@@ -408,7 +408,7 @@ def _server_with_momentum_device():
             return {"connected": True, "transport": {"type": "usb"}, "rpc_responsive": True}
         async def get_device_info(self):
             return {
-                "hardware_name": "Lun10n",
+                "hardware_name": "TestFlipper",
                 "hardware_target": "7",
                 "firmware_version": "mntm-012",
                 "firmware_origin_fork": "Momentum",
@@ -728,7 +728,7 @@ class FakeRPC:
         self.rebooted = False
 
     async def get_device_info(self):
-        return {"hardware_target": self._target, "hardware_name": "Lun10n"}
+        return {"hardware_target": self._target, "hardware_name": "TestFlipper"}
 
     async def storage_mkdir(self, path):
         self.calls.append(f"mkdir:{path}")
@@ -1377,7 +1377,7 @@ async def test_firmware_install_blocked_without_flag():
         with pytest.raises(ToolError, match="FLIPPER_ENABLE_FIRMWARE_FLASH"):
             await client.call_tool(
                 "flipperzero_firmware_install",
-                {"source": {"path": "/tmp/x.tgz"}, "confirm": "Lun10n"},
+                {"source": {"path": "/tmp/x.tgz"}, "confirm": "TestFlipper"},
             )
 
 
@@ -1386,7 +1386,7 @@ async def test_firmware_install_rejects_wrong_confirm_token():
     server = create_server(
         FlipperConfig(_env_file=None, enable_write_tools=True, enable_firmware_flash=True)
     )
-    # Inject a fake client whose device name is Lun10n (mirror the injection
+    # Inject a fake client whose device name is TestFlipper (mirror the injection
     # idiom used in tests/unit/test_tool_systeminfo.py).
     async with Client(server) as client:
         with pytest.raises(ToolError, match="confirm"):
@@ -1540,7 +1540,7 @@ git commit -m "feat(tools): add gated flipperzero_firmware_install tool"
 
 ## Phase 6 — Real-hardware validation + dual golden fixtures
 
-> These steps touch the physical test device (`Lun10n`) and are LOCAL ONLY. They are destructive (reflash). The connected device is a designated test unit.
+> These steps touch the physical test device (`TestFlipper`) and are LOCAL ONLY. They are destructive (reflash). The connected device is a designated test unit.
 
 ### Task 11: Validate flash + chunk size on hardware
 
@@ -1555,7 +1555,7 @@ Run (with the server env set for USB):
 
 - [ ] **Step 2: Flash official `release` with both flags + confirm**
 
-Set `FLIPPER_ENABLE_WRITE_TOOLS=true FLIPPER_ENABLE_FIRMWARE_FLASH=true`. Call `flipperzero_firmware_install` with `{"source": {"flavor": "official", "channel": "release", "version": "latest"}, "confirm": "Lun10n"}`. Watch the device screen for the updater. Expected: returns `after.flavor == "official"`.
+Set `FLIPPER_ENABLE_WRITE_TOOLS=true FLIPPER_ENABLE_FIRMWARE_FLASH=true`. Call `flipperzero_firmware_install` with `{"source": {"flavor": "official", "channel": "release", "version": "latest"}, "confirm": "TestFlipper"}`. Watch the device screen for the updater. Expected: returns `after.flavor == "official"`.
 
 - [ ] **Step 3: If large writes stall**, lower `_WRITE_CHUNK_SIZE` (try 512) and re-run Task 1's tests + retry. Commit only if changed:
 
@@ -1565,7 +1565,7 @@ git commit -am "fix(rpc): tune storage write chunk size for hardware reliability
 
 - [ ] **Step 4: Flash back to Momentum**
 
-Call `flipperzero_firmware_install` with `{"source": {"flavor": "momentum", "version": "latest"}, "confirm": "Lun10n"}`. Expected: `after.flavor == "momentum"`. Leave the device on the firmware the fixtures need for Task 12 (flash official again if you want official to be the captured baseline, then re-capture).
+Call `flipperzero_firmware_install` with `{"source": {"flavor": "momentum", "version": "latest"}, "confirm": "TestFlipper"}`. Expected: `after.flavor == "momentum"`. Leave the device on the firmware the fixtures need for Task 12 (flash official again if you want official to be the captured baseline, then re-capture).
 
 ### Task 12: Capture official golden fixtures + parametrize
 

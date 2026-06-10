@@ -1,0 +1,43 @@
+{
+  "schema_version": 1,
+  "name": "cli_exec_device_info",
+  "description": "cli_exec('device_info'): echo+prompt stripping, benign risk, completed.",
+  "meta": {
+    "supports_cli_text_mode": true,
+    "transport": "usb",
+    "firmware": "1.4.3"
+  },
+  "session_pre_started": true,
+  "events": [
+    {
+      "dir": "tx",
+      "b64": "A5oBAA=="
+    },
+    {
+      "dir": "rx",
+      "b64": "AiIA"
+    },
+    {
+      "dir": "tx",
+      "b64": "Aw0="
+    },
+    {
+      "dir": "rx",
+      "b64": "DQo+OiANCj46IA=="
+    },
+    {
+      "dir": "tx",
+      "b64": "ZGV2aWNlX2luZm8N"
+    },
+    {
+      "dir": "rx",
+      "b64": "ZGV2aWNlX2luZm8NCmRldmljZV9pbmZvX21ham9yICAgICAgICAgICAgIDogMg0KZGV2aWNlX2luZm9fbWlub3IgICAgICAgICAgICAgOiA0DQpoYXJkd2FyZV9tb2RlbCAgICAgICAgICAgICAgICA6IEZsaXBwZXIgWmVybw0KaGFyZHdhcmVfdWlkICAgICAgICAgICAgICAgICAgOiAwMDAwMDAwMDAwMDAwMDAwDQpoYXJkd2FyZV9vdHBfdmVyICAgICAgICAgICAgICA6IDINCmhhcmR3YXJlX3RpbWVzdGFtcCAgICAgICAgICAgIDogMTY0NDgxMDg2Nw0KaGFyZHdhcmVfdmVyICAgICAgICAgICAgICAgICAgOiAxMg0KaGFyZHdhcmVfdGFyZ2V0ICAgICAgICAgICAgICAgOiA3DQpoYXJkd2FyZV9ib2R5ICAgICAgICAgICAgICAgICA6IDkNCmhhcmR3YXJlX2Nvbm5lY3QgICAgICAgICAgICAgIDogNg0KaGFyZHdhcmVfZGlzcGxheSAgICAgICAgICAgICAgOiAxDQpoYXJkd2FyZV9jb2xvciAgICAgICAgICAgICAgICA6IDINCmhhcmR3YXJlX3JlZ2lvbiAgICAgICAgICAgICAgIDogMg0KaGFyZHdhcmVfcmVnaW9uX3Byb3Zpc2lvbmVkICAgOiBVUw0KaGFyZHdhcmVfbmFtZSAgICAgICAgICAgICAgICAgOiAwMDAwMDANCmZpcm13YXJlX2NvbW1pdCAgICAgICAgICAgICAgIDogODYyMmYxYTINCmZpcm13YXJlX2NvbW1pdF9kaXJ0eSAgICAgICAgIDogZmFsc2UNCmZpcm13YXJlX2JyYW5jaCAgICAgICAgICAgICAgIDogMS40LjMNCmZpcm13YXJlX2JyYW5jaF9udW0gICAgICAgICAgIDogMA0KZmlybXdhcmVfdmVyc2lvbiAgICAgICAgICAgICAgOiAxLjQuMw0KZmlybXdhcmVfYnVpbGRfZGF0ZSAgICAgICAgICAgOiAwNS0xMi0yMDI1DQpmaXJtd2FyZV90YXJnZXQgICAgICAgICAgICAgICA6IDcNCmZpcm13YXJlX2FwaV9tYWpvciAgICAgICAgICAgIDogODcNCmZpcm13YXJlX2FwaV9taW5vciAgICAgICAgICAgIDogMQ0KZmlybXdhcmVfb3JpZ2luX2ZvcmsgICAgICAgICAgOiBPZmZpY2lhbA0KZmlybXdhcmVfb3JpZ2luX2dpdCAgICAgICAgICAgOiBodHRwczovL2dpdGh1Yi5jb20vZmxpcHBlcmRldmljZXMvZmxpcHBlcnplcm8tZmlybXdhcmUNCnJhZGlvX2FsaXZlICAgICAgICAgICAgICAgICAgIDogdHJ1ZQ0KcmFkaW9fbW9kZSAgICAgICAgICAgICAgICAgICAgOiBTdGFjaw0KcmFkaW9fZnVzX21ham9yICAgICAgICAgICAgICAgOiAxDQpyYWRpb19mdXNfbWlub3IgICAgICAgICAgICAgICA6IDINCnJhZGlvX2Z1c19zdWIgICAgICAgICAgICAgICAgIDogMA0KcmFkaW9fZnVzX3NyYW0yYiAgICAgICAgICAgICAgOiAxNksNCnJhZGlvX2Z1c19zcmFtMmEgICAgICAgICAgICAgIDogMEsNCnJhZGlvX2Z1c19mbGFzaCAgICAgICAgICAgICAgIDogMjRLDQpyYWRpb19zdGFja190eXBlICAgICAgICAgICAgICA6IDMNCnJhZGlvX3N0YWNrX21ham9yICAgICAgICAgICAgIDogMQ0KcmFkaW9fc3RhY2tfbWlub3IgICAgICAgICAgICAgOiAyMA0KcmFkaW9fc3RhY2tfc3ViICAgICAgICAgICAgICAgOiAwDQpyYWRpb19zdGFja19icmFuY2ggICAgICAgICAgICA6IDANCnJhZGlvX3N0YWNrX3JlbGVhc2UgICAgICAgICAgIDogMg0KcmFkaW9fc3RhY2tfc3JhbTJiICAgICAgICAgICAgOiAxOUsNCnJhZGlvX3N0YWNrX3NyYW0yYSAgICAgICAgICAgIDogMTRLDQpyYWRpb19zdGFja19zcmFtMSAgICAgICAgICAgICA6IDBLDQpyYWRpb19zdGFja19mbGFzaCAgICAgICAgICAgICA6IDExNksNCnJhZGlvX2JsZV9tYWMgICAgICAgICAgICAgICAgIDogMDAwMDAwMDAwMDAwDQplbmNsYXZlX3ZhbGlkX2tleXMgICAgICAgICAgICA6IDEwDQplbmNsYXZlX3ZhbGlkICAgICAgICAgICAgICAgICA6IHRydWUNCnN5c3RlbV9kZWJ1ZyAgICAgICAgICAgICAgICAgIDogMA0Kc3lzdGVtX2xvY2sgICAgICAgICAgICAgICAgICAgOiAwDQpzeXN0ZW1fb3JpZW50ICAgICAgICAgICAgICAgICA6IDANCnN5c3RlbV9zbGVlcF9sZWdhY3kgICAgICAgICAgIDogMA0Kc3lzdGVtX3N0ZWFsdGggICAgICAgICAgICAgICAgOiAwDQpzeXN0ZW1faGVhcF90cmFjayAgICAgICAgICAgICA6IDANCnN5c3RlbV9ib290ICAgICAgICAgICAgICAgICAgIDogMA0Kc3lzdGVtX2xvY2FsZV90aW1lICAgICAgICAgICAgOiAwDQpzeXN0ZW1fbG9jYWxlX2RhdGUgICAgICAgICAgICA6IDANCnN5c3RlbV9sb2NhbGVfdW5pdCAgICAgICAgICAgIDogMA0Kc3lzdGVtX2xvZ19sZXZlbCAgICAgICAgICAgICAgOiAwDQpwcm90b2J1Zl92ZXJzaW9uX21ham9yICAgICAgICA6IDANCnByb3RvYnVmX3ZlcnNpb25fbWlub3IgICAgICAgIDogMjUNCg0KPjog"
+    }
+  ],
+  "expect": {
+    "output": "device_info_major             : 2\ndevice_info_minor             : 4\nhardware_model                : Flipper Zero\nhardware_uid                  : 0000000000000000\nhardware_otp_ver              : 2\nhardware_timestamp            : 1644810867\nhardware_ver                  : 12\nhardware_target               : 7\nhardware_body                 : 9\nhardware_connect              : 6\nhardware_display              : 1\nhardware_color                : 2\nhardware_region               : 2\nhardware_region_provisioned   : US\nhardware_name                 : 000000\nfirmware_commit               : 8622f1a2\nfirmware_commit_dirty         : false\nfirmware_branch               : 1.4.3\nfirmware_branch_num           : 0\nfirmware_version              : 1.4.3\nfirmware_build_date           : 05-12-2025\nfirmware_target               : 7\nfirmware_api_major            : 87\nfirmware_api_minor            : 1\nfirmware_origin_fork          : Official\nfirmware_origin_git           : https://github.com/flipperdevices/flipperzero-firmware\nradio_alive                   : true\nradio_mode                    : Stack\nradio_fus_major               : 1\nradio_fus_minor               : 2\nradio_fus_sub                 : 0\nradio_fus_sram2b              : 16K\nradio_fus_sram2a              : 0K\nradio_fus_flash               : 24K\nradio_stack_type              : 3\nradio_stack_major             : 1\nradio_stack_minor             : 20\nradio_stack_sub               : 0\nradio_stack_branch            : 0\nradio_stack_release           : 2\nradio_stack_sram2b            : 19K\nradio_stack_sram2a            : 14K\nradio_stack_sram1             : 0K\nradio_stack_flash             : 116K\nradio_ble_mac                 : 000000000000\nenclave_valid_keys            : 10\nenclave_valid                 : true\nsystem_debug                  : 0\nsystem_lock                   : 0\nsystem_orient                 : 0\nsystem_sleep_legacy           : 0\nsystem_stealth                : 0\nsystem_heap_track             : 0\nsystem_boot                   : 0\nsystem_locale_time            : 0\nsystem_locale_date            : 0\nsystem_locale_unit            : 0\nsystem_log_level              : 0\nprotobuf_version_major        : 0\nprotobuf_version_minor        : 25",
+    "completed": true,
+    "risk": "benign",
+    "warning": null
+  }
+}

@@ -13,13 +13,26 @@ import base64
 
 import pytest
 from fastmcp.exceptions import ToolError
-from tests.golden.harness import Fixture, ReplayTransport, load_all
+from tests.golden.harness import (
+    FIRMWARE_FLAVORS,
+    HARDWARE_FIXTURES,
+    OFFLINE_FIXTURES,
+    Fixture,
+    ReplayTransport,
+    hardware_dir,
+    load_all,
+)
 
 from flipperzero_mcp.errors import FlipperCLIRefusedError, FlipperCLIUnavailableError
 from flipperzero_mcp.rpc.client import FlipperClient, LinkMode
 from flipperzero_mcp.rpc.protobuf_gen import flipper_pb2
 from flipperzero_mcp.rpc.protobuf_rpc import ProtobufRPC
 from flipperzero_mcp.tools.storage import _md5_hex, _verify_md5
+
+
+def _hw(name: str, flavor: str) -> Fixture:
+    """Load a hardware fixture recorded on ``flavor`` firmware."""
+    return Fixture.load(name, hardware_dir(flavor))
 
 
 def _replay_client(fixture: Fixture) -> tuple[FlipperClient, ReplayTransport]:
@@ -50,27 +63,31 @@ def _decode_main(frame: bytes) -> flipper_pb2.Main:
 # --- drift / schema guard ----------------------------------------------------
 
 
-def test_every_fixture_loads_with_current_schema():
-    fixtures = load_all()
-    assert {f.name for f in fixtures} == {
-        "cli_exec_device_info",
-        "cli_tx_gate_disabled",
-        "fs_push_integrity",
-        "lock_contention",
-        "mode_switch",
-        "wifi_cli_rejection",
-    }
+def test_offline_fixtures_load_with_current_schema():
+    fixtures = load_all()  # flat dir holds only the firmware-independent fixtures
+    assert {f.name for f in fixtures} == set(OFFLINE_FIXTURES)
     for fixture in fixtures:
         assert fixture.description
         assert "transport" in fixture.meta
         assert fixture.expect
 
 
+@pytest.mark.parametrize("flavor", FIRMWARE_FLAVORS)
+def test_hardware_fixtures_load_with_current_schema(flavor):
+    fixtures = load_all(hardware_dir(flavor))
+    assert {f.name for f in fixtures} == set(HARDWARE_FIXTURES)
+    for fixture in fixtures:
+        assert fixture.description
+        assert fixture.meta.get("firmware")
+        assert fixture.expect
+
+
 # --- 1. cli_exec output parsing ----------------------------------------------
 
 
-async def test_cli_exec_parsing_matches_recorded_output():
-    fixture = Fixture.load("cli_exec_device_info")
+@pytest.mark.parametrize("flavor", FIRMWARE_FLAVORS)
+async def test_cli_exec_parsing_matches_recorded_output(flavor):
+    fixture = _hw("cli_exec_device_info", flavor)
     client, _ = _replay_client(fixture)
     result = await client.cli_exec("device_info", timeout_s=5.0)
     assert result["output"] == fixture.expect["output"]
@@ -82,8 +99,9 @@ async def test_cli_exec_parsing_matches_recorded_output():
 # --- 2. fs_push integrity: md5 match + mismatch ------------------------------
 
 
-async def test_fs_push_integrity_verifies_on_match():
-    fixture = Fixture.load("fs_push_integrity")
+@pytest.mark.parametrize("flavor", FIRMWARE_FLAVORS)
+async def test_fs_push_integrity_verifies_on_match(flavor):
+    fixture = _hw("fs_push_integrity", flavor)
     local = base64.b64decode(fixture.meta["local_content_b64"])
     client, _ = _replay_client(fixture)
     rpc = client.rpc
@@ -97,8 +115,9 @@ async def test_fs_push_integrity_verifies_on_match():
     assert _md5_hex(local) == fixture.expect["md5"]
 
 
-async def test_fs_push_integrity_fails_loud_on_mismatch():
-    fixture = Fixture.load("fs_push_integrity")
+@pytest.mark.parametrize("flavor", FIRMWARE_FLAVORS)
+async def test_fs_push_integrity_fails_loud_on_mismatch(flavor):
+    fixture = _hw("fs_push_integrity", flavor)
     local = base64.b64decode(fixture.meta["local_content_b64"])
     corrupted = local + b"!"  # host file differs from what the device hashed
     client, _ = _replay_client(fixture)
@@ -115,8 +134,9 @@ async def test_fs_push_integrity_fails_loud_on_mismatch():
 # --- 3. mode-switch in both directions ---------------------------------------
 
 
-async def test_mode_switch_both_directions():
-    fixture = Fixture.load("mode_switch")
+@pytest.mark.parametrize("flavor", FIRMWARE_FLAVORS)
+async def test_mode_switch_both_directions(flavor):
+    fixture = _hw("mode_switch", flavor)
     client, transport = _replay_client(fixture)
     rpc_mode = await client.enter_rpc()
     cli_mode = await client.enter_cli()
@@ -140,8 +160,9 @@ def _try_decode(frame: bytes) -> flipper_pb2.Main | None:
 # --- 4. shared _io_lock contention -------------------------------------------
 
 
-def test_lock_contention_recording_is_not_interleaved():
-    fixture = Fixture.load("lock_contention")
+@pytest.mark.parametrize("flavor", FIRMWARE_FLAVORS)
+def test_lock_contention_recording_is_not_interleaved(flavor):
+    fixture = _hw("lock_contention", flavor)
     dirs = [e.dir for e in fixture.events]
     first_rx = dirs.index("rx")
     second_tx = dirs.index("tx", dirs.index("tx") + 1)
@@ -150,8 +171,9 @@ def test_lock_contention_recording_is_not_interleaved():
     assert second_tx > first_rx
 
 
-async def test_lock_contention_replays_both_round_trips():
-    fixture = Fixture.load("lock_contention")
+@pytest.mark.parametrize("flavor", FIRMWARE_FLAVORS)
+async def test_lock_contention_replays_both_round_trips(flavor):
+    fixture = _hw("lock_contention", flavor)
     client, _ = _replay_client(fixture)
     rpc = client.rpc
     assert rpc is not None
@@ -183,7 +205,7 @@ async def test_tx_gate_disabled_refuses_before_io():
 async def test_tx_gate_enabled_passes_both_gates_and_executes():
     # Reuse the benign captured CLI exchange to drive the gate-pass path; we do
     # not transmit on real hardware for safety/legality.
-    fixture = Fixture.load("cli_exec_device_info")
+    fixture = _hw("cli_exec_device_info", "momentum")
     client, transport = _replay_client(fixture)
     result = await client.cli_exec(
         _TX_COMMAND, timeout_s=5.0, accept_responsibility=True, tx_tools_enabled=True
