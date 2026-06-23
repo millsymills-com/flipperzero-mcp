@@ -119,6 +119,12 @@ def test_parse_i2c_ignores_rows_outside_7bit_space():
     assert _parse_i2c("8 | - - 82 - - - - - - - - - - - - -") == []
 
 
+def test_parse_i2c_ignores_cells_past_the_16th_column():
+    # The grid only spans the low nibble (16 columns). A responder in a 17th cell
+    # would map past 0x?f, so the `col >= 16` guard drops it.
+    assert _parse_i2c("0 | - - - - - - - - - - - - - - - - 99") == []
+
+
 def test_parse_loader_list_drops_headers_and_blanks():
     out = "Applications:\nSubGHz\nNFC\n\nPlugins:\nSnake Game"
     assert _parse_loader_list(out) == ["SubGHz", "NFC", "Snake Game"]
