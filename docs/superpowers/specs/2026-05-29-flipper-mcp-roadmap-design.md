@@ -185,6 +185,18 @@ spec is the `flipper://workflow/*` doc written in v1.
   mismatches or the firmware is custom/unofficial; document whether `ufbt` is
   expected on `PATH` or invoked from a pinned location.
 
+## v2.5 — Typed coverage of the CLI+RPC surface
+
+Tracked by `docs/superpowers/plans/2026-06-23-tool-coverage-to-90pct.md` (accepted
+ceiling 66/82 ≈ 80.5% USB-attached). The band pulls v3's typed *radio read* tools
+forward under the v3 safety posture while leaving ESP32 flashing in v3. Landed so
+far:
+
+- **P0/P1 — RPC reads (gate `none`, both transports):** `flipperzero_system_ping`,
+  `flipperzero_system_property_get`, `flipperzero_app_lock_status`,
+  `flipperzero_app_get_error`, `flipperzero_desktop_is_locked`,
+  `flipperzero_gpio_read`. (23/82 ≈ 28.0%.)
+
 ## v3 — Higher-surface / higher-risk integrations
 
 - **ESP32 dev-board flashing** (`firmware/`): `esp32_detect`, `esp32_flash`

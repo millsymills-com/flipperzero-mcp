@@ -22,10 +22,13 @@ from flipperzero_mcp.server import create_server
 # asserts the four hint columns, not this. Keep in sync with the require_* guards
 # in src/flipperzero_mcp/tools/.
 GATE: dict[str, str] = {
+    "flipperzero_app_get_error": "none",
+    "flipperzero_app_lock_status": "none",
     "flipperzero_app_start": "WRITE",
     "flipperzero_cli_exec": "TX + i_accept_responsibility",
     "flipperzero_connection_health": "none",
     "flipperzero_connection_reconnect": "none",
+    "flipperzero_desktop_is_locked": "none",
     "flipperzero_firmware_install": "WRITE + FIRMWARE_FLASH",
     "flipperzero_fs_delete": "WRITE",
     "flipperzero_fs_info": "none",
@@ -36,9 +39,12 @@ GATE: dict[str, str] = {
     "flipperzero_fs_rename": "WRITE",
     "flipperzero_fs_stat": "none",
     "flipperzero_fs_timestamp": "none",
+    "flipperzero_gpio_read": "none",
     "flipperzero_system_datetime": "none",
     "flipperzero_system_info": "none",
+    "flipperzero_system_ping": "none",
     "flipperzero_system_power_info": "none",
+    "flipperzero_system_property_get": "none",
     "flipperzero_system_protobuf_version": "none",
 }
 
