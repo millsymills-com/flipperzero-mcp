@@ -71,7 +71,10 @@ def _type_str(prop: dict[str, Any]) -> str:
 
 
 def _group(tags: set[str]) -> str:
-    return next(tag for tag in sorted(tags) if tag != "flipper")
+    group = next((tag for tag in sorted(tags) if tag != "flipper"), None)
+    if group is None:
+        raise ValueError("tool has no group tag besides 'flipper'")
+    return group
 
 
 def _bool_cell(value: bool | None) -> str:

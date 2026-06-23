@@ -109,8 +109,11 @@ def _live_view(tools: list[Any]) -> DocView:
     parameters: dict[str, list[dict[str, Any]]] = {}
     for tool in tools:
         ann = tool.annotations
+        group = next((tag for tag in sorted(tool.tags) if tag != "flipper"), None)
+        if group is None:
+            raise ValueError(f"{tool.name} has no group tag besides 'flipper'")
         annotations[tool.name] = {
-            "group": next(tag for tag in sorted(tool.tags) if tag != "flipper"),
+            "group": group,
             "readOnlyHint": ann.readOnlyHint,
             "destructiveHint": ann.destructiveHint,
             "idempotentHint": ann.idempotentHint,
@@ -143,6 +146,7 @@ def markdown() -> str:
 
 def test_tool_set_matches(markdown: str, live: DocView) -> None:
     live_annotations, _ = live
+    assert live_annotations, "live server exposed no tools"
     assert set(_doc_annotations(markdown)) == set(live_annotations), (
         "tool set drift between docs/tool-schema-matrix.md and the live server; "
         "regenerate with tests/tools/gen_schema_matrix.py"
@@ -159,5 +163,10 @@ def test_annotations_match(markdown: str, live: DocView) -> None:
 def test_parameters_match(markdown: str, live: DocView) -> None:
     doc = _doc_parameters(markdown)
     _, live_parameters = live
+    assert set(doc) == set(live_parameters), (
+        "parameter-table tool set drift (orphan or missing rows) between "
+        "docs/tool-schema-matrix.md and the live server; "
+        "regenerate with tests/tools/gen_schema_matrix.py"
+    )
     for name, live_params in live_parameters.items():
         assert doc.get(name, []) == live_params, f"parameter drift for {name}"
