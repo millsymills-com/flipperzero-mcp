@@ -254,7 +254,7 @@ def _server(
         ),
     )
     monkeypatch.setattr("flipperzero_mcp.rpc.client.FlipperClient.cli_exec", fake_cli_exec)
-    return create_server(FlipperConfig(_env_file=None))
+    return create_server(FlipperConfig(_env_file=None))  # ty: ignore[unknown-argument]
 
 
 async def test_core_status_parses_heap_and_app_open_uptime(monkeypatch):
@@ -320,7 +320,7 @@ async def test_cli_typed_refuses_gated_command(command):
     # reach the device, so a transmit/destructive subcommand can never hide behind
     # a typed tool. The check runs ahead of connection, so no real ctx is needed.
     with pytest.raises(ToolError, match="benign-only"):
-        await cli_typed(None, command)
+        await cli_typed(None, command)  # ty: ignore[invalid-argument-type]
 
 
 async def test_cli_typed_surfaces_not_connected_as_toolerror(monkeypatch):
