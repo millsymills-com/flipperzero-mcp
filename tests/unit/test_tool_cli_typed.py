@@ -342,8 +342,14 @@ async def test_cli_typed_surfaces_unexpected_error_as_toolerror(monkeypatch):
     # from transport.is_connected() is not one of the (OSError, RuntimeError) drops
     # ensure_connected tolerates, so it propagates to the catch-all. Driven through the
     # transport, not by monkeypatching the helper, so the test couples to the contract
-    # rather than the helper name.
-    server = _server(monkeypatch, {"free": _FREE}, is_connected_raises=ValueError("usb fell out"))
+    # rather than the helper name. Both commands are seeded so the ValueError seam is
+    # the only fault source: were `ensure_connected` to widen its except to swallow the
+    # ValueError, reconnect would succeed and both calls would return, failing this test.
+    server = _server(
+        monkeypatch,
+        {"free": _FREE, "uptime": _APP_OPEN_UPTIME},
+        is_connected_raises=ValueError("usb fell out"),
+    )
     async with Client(server) as client:
         with pytest.raises(ToolError, match="unexpected error"):
             await client.call_tool("flipperzero_core_status", {})
