@@ -1,21 +1,22 @@
 # Plan: Raise typed-tool coverage of the Flipper CLI+RPC surface
 
 **Date:** 2026-06-23
-**Status:** Draft for review (built by an ultracode workflow, hardened against three
-adversarial review passes — honesty, feasibility, safety)
+**Status:** Accepted target = ~80.5% buildable ceiling (Option b). Built by an
+ultracode workflow, hardened against three adversarial review passes (honesty,
+feasibility, safety), and revalidated against the codebase on 2026-06-23 (see
+Appendix — revalidation).
 **Repo:** `flipperzero-mcp`
 **Denominator decision (from requester):** full CLI+RPC surface; the generic
 `flipperzero_cli_exec` counts as a generic escape hatch, *not* as covering any
 specific subsystem.
 
-> **Headline up front (read this before the target):** the buildable, well-designed
-> tool set lands at **66/82 ≈ 80.5% of the full surface, USB-attached**. A literal
-> **≥90%** is reachable only by splitting good bundled tools (`subghz rx` vs
-> `rx raw` vs `decode raw`, `power 5v` vs `power 3v3` vs `gpio set`, …) into
-> per-subcommand tools purely to raise the count — which this plan judges
-> metric-gaming. **A decision is required (§4 tail) on whether to chase the literal
-> 90% or accept the ~80% honest ceiling.** Either way, coverage over **WiFi** stays
-> near the RPC-only baseline because every CLI-text tool is USB-only (TP-2).
+> **Headline up front (read this before the target):** the accepted target is the
+> **66/82 ≈ 80.5% of the full surface, USB-attached** buildable ceiling (Option b,
+> §4 tail). A literal **≥90%** was rejected: it is reachable only by splitting good
+> bundled tools (`subghz rx` vs `rx raw` vs `decode raw`, `power 5v` vs `power 3v3`
+> vs `gpio set`, …) into per-subcommand tools purely to raise the count, which this
+> plan judges metric-gaming. Coverage over **WiFi** stays near the RPC-only baseline
+> because every CLI-text tool is USB-only (TP-2).
 
 ---
 
@@ -50,9 +51,11 @@ Two honesty rules this plan holds itself to:
    (`core_status`, `crypto_status`, `subghz_decode_file`, `ir_decode_file`) from
    numerator credit unless they add real structure.
 
-Reaching **≥90%** of 82 means **≥74 covered**, i.e. **+57 new counting tools** from
-the 17 baseline. The headline is only meaningful with the exclusion list intact — if
-anyone re-counts the GUI/stream surfaces into the denominator, 90% moves.
+The **accepted target** is the buildable ceiling of **66/82 ≈ 80.5%** (Option b,
+§4) — i.e. **+49 new counting tools** from the 17 baseline, every non-excluded
+single-return surface wrapped. Literal ≥90% (≥74 covered) was rejected as
+bundle-splitting metric-gaming. The number is only meaningful with the exclusion list
+intact — if anyone re-counts the GUI/stream surfaces into the denominator, it moves.
 
 ---
 
@@ -156,8 +159,10 @@ warning for CLI strings. RPC-side TX/destructive tools never touch `cli_risk` an
 would ship **ungated** on a naive copy-paste. Add
 `require_tx(ctx, accept_responsibility, *, flavor)` to `_common.py` that enforces
 `FLIPPER_ENABLE_TX_TOOLS` + per-call `i_accept_responsibility`, and selects the
-**warning flavor** (`transmit`-with-region for RF, `destructive` for filesystem/power
-wipes) so a filesystem wipe never ships with RF-spectrum warning text. Must land
+**warning flavor** so a filesystem wipe never ships with RF-spectrum warning text.
+`flavor` reuses the existing `cli_risk.Category` (`"transmit"` / `"destructive"`) and
+its `_WARNINGS` dict (both already present, confirmed at revalidation) — no new
+warning text is invented; RF tools additionally append the region note. Must land
 before P4 — the first TX-gated batch.
 
 ---
@@ -318,25 +323,26 @@ Residual uncovered surfaces. Items already counted via dedup (e.g. `power 5v` as
 
 **P6 = 6 tools. +6 → 66/82 = 80.5%** — **this is the honest buildable ceiling.**
 
-#### The 90% decision (required before P5)
+#### The 90% decision — RESOLVED: Option (b), accept the ~80.5% ceiling
 
 P0–P6 as scoped land at **66/82 ≈ 80.5% USB-attached**. The remaining ~8 points to
 reach **74/82 = 90.2%** exist only as **dedup-collapsed / bundled surfaces**. Hitting
-literal 90% requires splitting good bundled tools into per-subcommand tools
+literal 90% would require splitting good bundled tools into per-subcommand tools
 (`subghz rx` vs `rx raw` vs `decode raw`; `nfc scanner` vs `nfc field`; `gpio write`
 vs `power 5v` vs `power 3v3`; …) purely to raise the count.
 
-- **Option (a) — chase literal 90%:** split the bundles → ~74 counting tools → ≥90%.
-  Crosses 90% in a "P6-split" batch. Cost: more tools for the same surface, worse UX,
-  and it re-splits in the numerator exactly what the denominator deduped — internally
-  inconsistent accounting.
-- **Option (b) — accept the honest ceiling (recommended):** stop at **66/82 ≈ 80.5%**,
-  declare it "100% of the non-excluded single-return surface," and record that literal
-  90%-by-tool-count is metric-gaming not worth the sprawl.
+- **Option (a) — chase literal 90% (rejected):** split the bundles → ~74 counting
+  tools → ≥90%. Cost: more tools for the same surface, worse UX, and it re-splits in
+  the numerator exactly what the denominator deduped — internally inconsistent
+  accounting.
+- **Option (b) — accept the honest ceiling (ACCEPTED 2026-06-23):** stop at
+  **66/82 ≈ 80.5%**, treated as "100% of the non-excluded single-return surface."
+  Literal 90%-by-tool-count is recorded as metric-gaming not worth the sprawl.
 
-**This plan recommends (b).** Pick (a) only if a literal ≥90% number is a hard
-external requirement; if so, re-baseline the *denominator* to un-dedup those surfaces
-so both sides of the ratio agree, rather than splitting only the numerator.
+**Decision: Option (b).** The program completes at P6 (66/82). No bundle-splitting
+batch is planned. If a literal ≥90% number ever becomes a hard external requirement,
+re-baseline the *denominator* to un-dedup those surfaces so both sides of the ratio
+agree, rather than splitting only the numerator.
 
 ---
 
@@ -440,6 +446,25 @@ so both sides of the ratio agree, rather than splitting only the numerator.
 prefixes), `config.py` (`FLIPPER_SUBGHZ_REGION`), `tools/__init__.py` (register_*),
 `tests/tools/gen_schema_matrix.py` (`GATE` map), `docs/tool-schema-matrix.md`
 (regenerated).
+
+## Appendix — revalidation (2026-06-23)
+
+Every load-bearing claim was checked against the working tree. All held:
+
+| Claim | Verified |
+|---|---|
+| 18 registered tools; `GATE` map drives the matrix | 18 `@mcp.tool` decorators; `GATE` dict at `gen_schema_matrix.py:24`, indexed `GATE[tool.name]` at `:108` |
+| Link-mode manager exists, no new lock | `rpc/client.py`: `LinkMode` (:26), `self._io_lock` (:109), `enter_rpc`/`enter_cli`/`mode` (:141/:157/:137), shared via `ProtobufRPC(..., io_lock=self._io_lock)` (:120) |
+| WiFi has no CLI text mode | `transport/wifi.py:37-39` `supports_cli_text_mode` returns `False` |
+| `_enforce_tx_gate` is a staticmethod, not a per-call `ctx` gate | `rpc/client.py:297` `(warning, accept_responsibility, tx_tools_enabled)` |
+| `require_tx` is net-new | `tools/_common.py` has `require_write_tools` (:27) + `require_firmware_flash` (:43) only |
+| `ping`/`get_property` reusable; general reboot is NEW | `protobuf_rpc.py`: `ping` (:389), `get_property` (:687); `system_reboot_update` (:474) is UPDATE-only |
+| All new-tool proto messages exist | `application/desktop/system/storage/gpio _pb2.py` contain every referenced message incl. GPIO `SetPinMode`/`WritePin`/`SetOtgMode`/`ReadPin`/`GetPinMode` |
+| Config flags present; `subghz_region` absent | `config.py:26-28` `enable_tx_tools`/`enable_write_tools`/`enable_firmware_flash`; no region field |
+| `cli_risk` warning flavors already exist | `cli_risk.py:15` `Category = "benign"\|"transmit"\|"destructive"`; `_WARNINGS` (:32) covers transmit + destructive |
+
+**Refinement folded in:** `require_tx`'s warning flavor reuses `cli_risk._WARNINGS`
+rather than inventing text (TP-5, §5).
 
 ## Appendix — out of scope (not in the 82)
 
