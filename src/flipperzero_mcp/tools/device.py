@@ -99,8 +99,8 @@ def register_device_tools(mcp: FastMCP) -> None:
         Returns:
             Dict with the ``pin`` index, its ``mode``
             (``"input"``/``"output"``/``"unconfigured"``), and its current
-            ``value`` (0/1, or ``None`` when the pin is not an input and so has no
-            readable level).
+            ``value`` (pin level, typically 0 or 1, or ``None`` when the pin is
+            not an input and so has no readable level).
 
         Raises:
             ToolError: If ``pin`` is out of range, the device is unreachable, or

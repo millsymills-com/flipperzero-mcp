@@ -434,7 +434,7 @@ class ProtobufRPC:
                 ):
                     return resp.app_lock_status_response.locked
             except Exception:
-                logger.debug("app_lock_status failed", exc_info=True)
+                logger.exception("app_lock_status failed")
             return None
 
     async def app_get_error(self) -> dict[str, Any] | None:
@@ -454,7 +454,7 @@ class ProtobufRPC:
                     err = resp.app_get_error_response
                     return {"code": err.code, "text": err.text}
             except Exception:
-                logger.debug("app_get_error failed", exc_info=True)
+                logger.exception("app_get_error failed")
             return None
 
     async def desktop_is_locked(self) -> bool | None:
@@ -478,7 +478,7 @@ class ProtobufRPC:
                 if resp.command_status == flipper_pb2.CommandStatus.ERROR:
                     return False
             except Exception:
-                logger.debug("desktop_is_locked failed", exc_info=True)
+                logger.exception("desktop_is_locked failed")
             return None
 
     async def gpio_read(self, pin: int) -> dict[str, Any] | None:
@@ -529,7 +529,7 @@ class ProtobufRPC:
 
                 return {"pin": pin, "mode": mode, "value": value}
             except Exception:
-                logger.debug("gpio_read failed", exc_info=True)
+                logger.exception("gpio_read failed")
             return None
 
     async def system_protobuf_version(self) -> dict[str, int] | None:

@@ -54,6 +54,12 @@ async def test_app_lock_status_returns_none_on_error_status():
 
 
 @pytest.mark.asyncio
+async def test_app_lock_status_none_on_link_drop():
+    rpc = _make_rpc()
+    assert await rpc.app_lock_status() is None
+
+
+@pytest.mark.asyncio
 async def test_app_get_error_returns_code_and_text():
     reply = flipper_pb2.Main()
     reply.command_status = flipper_pb2.CommandStatus.OK
@@ -61,6 +67,21 @@ async def test_app_get_error_returns_code_and_text():
     reply.app_get_error_response.text = "boom"
     rpc = _make_rpc(reply)
     assert await rpc.app_get_error() == {"code": 5, "text": "boom"}
+
+
+@pytest.mark.asyncio
+async def test_app_get_error_none_on_error_status():
+    reply = flipper_pb2.Main()
+    reply.command_id = 1
+    reply.command_status = flipper_pb2.CommandStatus.ERROR
+    rpc = _make_rpc(reply)
+    assert await rpc.app_get_error() is None
+
+
+@pytest.mark.asyncio
+async def test_app_get_error_none_on_link_drop():
+    rpc = _make_rpc()
+    assert await rpc.app_get_error() is None
 
 
 @pytest.mark.asyncio
@@ -132,3 +153,27 @@ async def test_gpio_read_none_on_unexpected_mode_status():
     mode_reply.command_status = flipper_pb2.CommandStatus.ERROR_BUSY
     rpc = _make_rpc(mode_reply)
     assert await rpc.gpio_read(0) is None
+
+
+@pytest.mark.asyncio
+async def test_gpio_read_none_when_value_request_drops():
+    # Mode read succeeds on an input pin, but the value request gets no reply
+    # (mid-sequence transport drop): the whole read returns None.
+    mode_reply = flipper_pb2.Main()
+    mode_reply.command_status = flipper_pb2.CommandStatus.OK
+    mode_reply.gpio_get_pin_mode_response.mode = gpio_pb2.GpioPinMode.INPUT
+    rpc = _make_rpc(mode_reply)
+    assert await rpc.gpio_read(3) is None
+
+
+@pytest.mark.asyncio
+async def test_gpio_read_value_none_when_response_field_missing():
+    # Value request returns OK but without the read_pin_response body.
+    mode_reply = flipper_pb2.Main()
+    mode_reply.command_status = flipper_pb2.CommandStatus.OK
+    mode_reply.gpio_get_pin_mode_response.mode = gpio_pb2.GpioPinMode.INPUT
+    value_reply = flipper_pb2.Main()
+    value_reply.command_id = 1
+    value_reply.command_status = flipper_pb2.CommandStatus.OK
+    rpc = _make_rpc(mode_reply, value_reply)
+    assert await rpc.gpio_read(3) == {"pin": 3, "mode": "input", "value": None}
