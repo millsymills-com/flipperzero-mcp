@@ -48,8 +48,9 @@ def _parse_tree(output: str) -> list[dict[str, Any]]:
     """Parse ``storage tree`` output into depth-tagged file/dir entries."""
     entries: list[dict[str, Any]] = []
     for raw_line in output.splitlines():
-        depth = len(raw_line) - len(raw_line.lstrip("\t"))
-        match = _TREE_LINE.match(_strip_ansi(raw_line).strip())
+        line = _strip_ansi(raw_line)
+        depth = len(line) - len(line.lstrip("\t"))
+        match = _TREE_LINE.match(line.strip())
         if match is None:
             continue
         size = match["size"]
