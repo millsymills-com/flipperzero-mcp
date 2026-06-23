@@ -15,7 +15,7 @@ uv run pytest tests/unit/test_schema_matrix_drift.py
 ```
 
 
-**24 tools** across 8 groups: apps, cli, connection, device, diagnostics, firmware, storage, systeminfo.
+**28 tools** across 9 groups: apps, cli, cli_typed, connection, device, diagnostics, firmware, storage, systeminfo.
 
 ## Annotations
 
@@ -32,6 +32,7 @@ drift test asserts the four hint columns, not `Gate`). `WRITE` =
 | `flipperzero_cli_exec` | cli | false | true | false | true | TX + i_accept_responsibility |
 | `flipperzero_connection_health` | connection | true | — | true | true | none |
 | `flipperzero_connection_reconnect` | connection | false | false | false | true | none |
+| `flipperzero_core_status` | cli_typed | true | — | true | true | none |
 | `flipperzero_desktop_is_locked` | device | true | — | true | true | none |
 | `flipperzero_firmware_install` | firmware | false | true | false | true | WRITE + FIRMWARE_FLASH |
 | `flipperzero_fs_delete` | storage | false | true | false | true | WRITE |
@@ -43,7 +44,10 @@ drift test asserts the four hint columns, not `Gate`). `WRITE` =
 | `flipperzero_fs_rename` | storage | false | true | false | true | WRITE |
 | `flipperzero_fs_stat` | storage | true | — | true | true | none |
 | `flipperzero_fs_timestamp` | storage | true | — | true | true | none |
+| `flipperzero_fs_tree` | cli_typed | true | — | true | true | none |
 | `flipperzero_gpio_read` | device | true | — | true | true | none |
+| `flipperzero_i2c_scan` | cli_typed | true | — | true | true | none |
+| `flipperzero_loader_list` | cli_typed | true | — | true | true | none |
 | `flipperzero_system_datetime` | systeminfo | true | — | true | true | none |
 | `flipperzero_system_info` | systeminfo | true | — | true | true | none |
 | `flipperzero_system_ping` | diagnostics | true | — | true | true | none |
@@ -68,6 +72,7 @@ parameters.
 | `flipperzero_cli_exec` | `i_accept_responsibility` | boolean | optional | `false` |
 | `flipperzero_connection_health` | `probe_rpc` | boolean | optional | `true` |
 | `flipperzero_connection_reconnect` | `probe_rpc` | boolean | optional | `true` |
+| `flipperzero_core_status` | — | — | — | — |
 | `flipperzero_desktop_is_locked` | — | — | — | — |
 | `flipperzero_firmware_install` | `source` | object | required | — |
 | `flipperzero_firmware_install` | `confirm` | string | required | — |
@@ -84,7 +89,10 @@ parameters.
 | `flipperzero_fs_rename` | `new_path` | string | required | — |
 | `flipperzero_fs_stat` | `path` | string | required | — |
 | `flipperzero_fs_timestamp` | `path` | string | required | — |
+| `flipperzero_fs_tree` | `path` | string | required | — |
 | `flipperzero_gpio_read` | `pin` | integer | required | — |
+| `flipperzero_i2c_scan` | — | — | — | — |
+| `flipperzero_loader_list` | — | — | — | — |
 | `flipperzero_system_datetime` | — | — | — | — |
 | `flipperzero_system_info` | — | — | — | — |
 | `flipperzero_system_ping` | — | — | — | — |

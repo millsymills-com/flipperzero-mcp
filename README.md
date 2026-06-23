@@ -9,8 +9,10 @@ tools to MCP clients such as Claude Desktop.
 ## Status
 
 **Stage: S2** (wrapped). The server runs over stdio with read tools (connection
-health, reconnect, system info/power/datetime/protobuf-version, and storage reads
-`fs_info`, `fs_stat`, `fs_timestamp`, `fs_list`, `fs_pull`) and write tools
+health, reconnect, system info/power/datetime/protobuf-version/ping/property,
+device reads `app_lock_status`/`app_get_error`/`desktop_is_locked`/`gpio_read`,
+typed USB CLI reads `core_status`/`fs_tree`/`loader_list`/`i2c_scan`, and storage
+reads `fs_info`, `fs_stat`, `fs_timestamp`, `fs_list`, `fs_pull`) and write tools
 (`fs_mkdir`, `fs_delete`, `fs_rename`, `fs_push`, `app_start`, `cli_exec`).
 Device-mutating storage/app operations are gated behind
 `FLIPPER_ENABLE_WRITE_TOOLS` and transmit/destructive CLI commands behind
@@ -28,7 +30,7 @@ push → launch) — see
   - **USB**: serial CDC, with CLI to RPC session switching.
   - **WiFi**: TCP to an ESP32 dev board running the TCP-to-UART bridge firmware.
 - `auto` transport selection: USB first, WiFi fallback only when a WiFi host is set.
-- Tools: connection health/reconnect, system info/power/datetime/protobuf-version, storage info/stat/timestamp/list/push/pull/mkdir/delete/rename, app start, and USB CLI exec.
+- Tools: connection health/reconnect, system info/power/datetime/protobuf-version/ping/property, device reads (app lock/error, desktop lock, gpio), typed USB CLI reads (core status, storage tree, loader list, i2c scan), storage info/stat/timestamp/list/push/pull/mkdir/delete/rename, app start, and USB CLI exec.
 
 ## Install
 

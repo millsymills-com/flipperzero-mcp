@@ -12,6 +12,7 @@ def register_all_tools(mcp: FastMCP) -> None:
     """Register every Flipper tool on the server."""
     from flipperzero_mcp.tools.apps import register_app_tools
     from flipperzero_mcp.tools.cli import register_cli_tools
+    from flipperzero_mcp.tools.cli_typed import register_cli_typed_tools
     from flipperzero_mcp.tools.connection import register_connection_tools
     from flipperzero_mcp.tools.device import register_device_tools
     from flipperzero_mcp.tools.diagnostics import register_diagnostics_tools
@@ -25,5 +26,6 @@ def register_all_tools(mcp: FastMCP) -> None:
     register_device_tools(mcp)
     register_storage_tools(mcp)
     register_cli_tools(mcp)
+    register_cli_typed_tools(mcp)
     register_app_tools(mcp)
     register_firmware_tools(mcp)
