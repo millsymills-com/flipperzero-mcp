@@ -6,6 +6,8 @@ from fastmcp.exceptions import ToolError
 
 from flipperzero_mcp.config import FlipperConfig
 from flipperzero_mcp.server import create_server
+from flipperzero_mcp.tools import _common
+from flipperzero_mcp.tools._common import cli_typed
 from flipperzero_mcp.tools.cli_typed import (
     _parse_free,
     _parse_i2c,
@@ -172,8 +174,10 @@ def test_parse_tree_depth_counts_tabs_when_ansi_precedes_indentation():
 
 
 class FakeTransport:
-    def __init__(self, supports_cli=True):
+    def __init__(self, supports_cli=True, *, connected=True, can_connect=True):
         self._supports_cli = supports_cli
+        self._connected = connected
+        self._can_connect = can_connect
 
     @property
     def supports_cli_text_mode(self):
@@ -186,16 +190,24 @@ class FakeTransport:
         return None
 
     async def connect(self):
-        return True
+        return self._can_connect
 
     async def disconnect(self):
         return None
 
     async def is_connected(self):
-        return True
+        return self._connected
 
 
-def _server(monkeypatch, outputs, *, supports_cli=True, completed=True):
+def _server(
+    monkeypatch,
+    outputs,
+    *,
+    supports_cli=True,
+    completed=True,
+    connected=True,
+    can_connect=True,
+):
     """Build a server whose client.cli_exec replays `outputs` keyed by command."""
 
     async def fake_cli_exec(self, command, timeout_s=10.0, **_kwargs):
@@ -212,7 +224,9 @@ def _server(monkeypatch, outputs, *, supports_cli=True, completed=True):
 
     monkeypatch.setattr(
         "flipperzero_mcp.server.get_transport",
-        lambda _t, _c: FakeTransport(supports_cli=supports_cli),
+        lambda _t, _c: FakeTransport(
+            supports_cli=supports_cli, connected=connected, can_connect=can_connect
+        ),
     )
     monkeypatch.setattr("flipperzero_mcp.rpc.client.FlipperClient.cli_exec", fake_cli_exec)
     return create_server(FlipperConfig(_env_file=None))
@@ -280,32 +294,26 @@ async def test_cli_typed_refuses_gated_command(command):
     # Defense in depth: the shared helper rejects any gated command before it can
     # reach the device, so a transmit/destructive subcommand can never hide behind
     # a typed tool. The check runs ahead of connection, so no real ctx is needed.
-    from flipperzero_mcp.tools._common import cli_typed
-
     with pytest.raises(ToolError, match="benign-only"):
         await cli_typed(None, command)
 
 
 async def test_cli_typed_surfaces_not_connected_as_toolerror(monkeypatch):
-    # When the device is unreachable, ensure_connected raises and cli_typed must
-    # surface a clean ToolError via _classify_client_error -- never fall through
-    # to an implicit None return.
-    from flipperzero_mcp.errors import FlipperNotConnectedError
-    from flipperzero_mcp.tools import _common
-
-    async def boom(_ctx):
-        raise FlipperNotConnectedError("device unavailable")
-
-    monkeypatch.setattr(_common, "ensure_connected", boom)
-    with pytest.raises(ToolError, match="not connected"):
-        await _common.cli_typed(None, "free")
+    # The real failure mode: ensure_connected calls client.connect(); when the
+    # transport cannot reconnect (connect() returns falsy) it raises, and cli_typed
+    # must surface a clean ToolError via _classify_client_error -- never fall
+    # through to an implicit None return. Drive it through the connect()-returns-
+    # false seam rather than monkeypatching ensure_connected, so the test couples
+    # to the not-connected contract, not the helper name.
+    server = _server(monkeypatch, {"free": _FREE}, connected=False, can_connect=False)
+    async with Client(server) as client:
+        with pytest.raises(ToolError, match="not connected"):
+            await client.call_tool("flipperzero_core_status", {})
 
 
 async def test_cli_typed_surfaces_unexpected_error_as_toolerror(monkeypatch):
     # The catch-all path: a non-Flipper exception out of ensure_connected is still
     # mapped to a ToolError, so no error path returns None.
-    from flipperzero_mcp.tools import _common
-
     async def boom(_ctx):
         raise RuntimeError("usb fell out")
 
