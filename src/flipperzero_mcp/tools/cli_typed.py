@@ -21,8 +21,9 @@ _READ_ONLY = ToolAnnotations(readOnlyHint=True, idempotentHint=True, openWorldHi
 
 _ANSI = re.compile(r"\x1b\[[0-9;]*m")
 _TREE_LINE = re.compile(r"^\[(?P<kind>[DF])\]\s+(?P<path>.+?)(?:\s+(?P<size>\d+)b)?$")
-# A populated row of the `i2c` scan grid: "<high-nibble> | <16 cells>".
-_I2C_ROW = re.compile(r"^(?P<high>[0-9a-fA-F])\s*\|\s*(?P<cells>.+)$")
+# A populated row of the `i2c` scan grid: "<high-nibble> | <16 cells>". Rows
+# only span the 7-bit space, so the high nibble is 0-7.
+_I2C_ROW = re.compile(r"^(?P<high>[0-7])\s*\|\s*(?P<cells>.+)$")
 _APP_OPEN = "application is open"
 
 
@@ -77,6 +78,8 @@ def _parse_i2c(output: str) -> list[str]:
             continue
         high = int(match["high"], 16)
         for col, cell in enumerate(match["cells"].split()):
+            if col >= 16:
+                break
             if cell != "-":
                 addresses.append(f"0x{high * 16 + col:02x}")
     return addresses

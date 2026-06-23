@@ -39,6 +39,14 @@ _I2C_ONE = (
     "--+--------------------------------\n"
     "6 | - - - - - - - - 68 - - - - - - - "
 )
+# Multiple responders: 0x00 (row 0, col 0), 0x3c (row 3, col 12), 0x77 (row 7, col 7).
+_I2C_MANY = (
+    "  | 0 1 2 3 4 5 6 7 8 9 A B C D E F\n"
+    "--+--------------------------------\n"
+    "0 | 00 - - - - - - - - - - - - - - - \n"
+    "3 | - - - - - - - - - - - - 3c - - - \n"
+    "7 | - - - - - - - 77 - - - - - - - - "
+)
 
 
 # --- parsers (pure, format-grounded) -----------------------------------------
@@ -86,6 +94,16 @@ def test_parse_i2c_empty_grid_has_no_addresses():
     assert _parse_i2c(_I2C_EMPTY) == []
 
 
+def test_parse_i2c_maps_multiple_responders_across_rows():
+    assert _parse_i2c(_I2C_MANY) == ["0x00", "0x3c", "0x77"]
+
+
+def test_parse_i2c_ignores_rows_outside_7bit_space():
+    # A row labelled with a high nibble > 7 (or extra columns) cannot encode a
+    # valid 7-bit address, so it is skipped rather than emitting a bogus 0x8x+.
+    assert _parse_i2c("8 | - - 82 - - - - - - - - - - - - -") == []
+
+
 def test_parse_loader_list_drops_headers_and_blanks():
     out = "Applications:\nSubGHz\nNFC\n\nPlugins:\nSnake Game"
     assert _parse_loader_list(out) == ["SubGHz", "NFC", "Snake Game"]
@@ -118,7 +136,7 @@ class FakeTransport:
         return True
 
 
-def _server(monkeypatch, outputs, *, supports_cli=True):
+def _server(monkeypatch, outputs, *, supports_cli=True, completed=True):
     """Build a server whose client.cli_exec replays `outputs` keyed by command."""
 
     async def fake_cli_exec(self, command, timeout_s=10.0, **_kwargs):
@@ -126,7 +144,12 @@ def _server(monkeypatch, outputs, *, supports_cli=True):
             from flipperzero_mcp.errors import FlipperCLIUnavailableError
 
             raise FlipperCLIUnavailableError("CLI text mode unavailable over WiFi bridge")
-        return {"output": outputs[command], "completed": True, "risk": "benign", "warning": None}
+        return {
+            "output": outputs[command],
+            "completed": completed,
+            "risk": "benign",
+            "warning": None,
+        }
 
     monkeypatch.setattr(
         "flipperzero_mcp.server.get_transport",
@@ -177,8 +200,28 @@ async def test_loader_list_returns_apps(monkeypatch):
         assert data["apps"] == ["Sub-GHz", "NFC", "Power"]
 
 
+async def test_fs_tree_marks_truncated_when_read_window_exceeded(monkeypatch):
+    server = _server(monkeypatch, {"storage tree /ext": _TREE}, completed=False)
+    async with Client(server) as client:
+        data = (await client.call_tool("flipperzero_fs_tree", {"path": "/ext"})).data
+        assert data["complete"] is False
+        assert data["truncated"] is True
+        assert len(data["entries"]) == 4  # partial prefix still parsed
+
+
 async def test_cli_typed_tool_unavailable_over_wifi(monkeypatch):
     server = _server(monkeypatch, {"i2c": ""}, supports_cli=False)
     async with Client(server) as client:
         with pytest.raises(ToolError, match="CLI text mode unavailable"):
             await client.call_tool("flipperzero_i2c_scan", {})
+
+
+@pytest.mark.parametrize("command", ["subghz tx 123456", "storage format /ext"])
+async def test_cli_typed_refuses_gated_command(command):
+    # Defense in depth: the shared helper rejects any gated command before it can
+    # reach the device, so a transmit/destructive subcommand can never hide behind
+    # a typed tool. The check runs ahead of connection, so no real ctx is needed.
+    from flipperzero_mcp.tools._common import cli_typed
+
+    with pytest.raises(ToolError, match="benign-only"):
+        await cli_typed(None, command)
