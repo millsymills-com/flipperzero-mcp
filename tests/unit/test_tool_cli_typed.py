@@ -154,13 +154,11 @@ def test_parse_tree_file_without_size_has_none_size():
     ]
 
 
-def test_parse_tree_depth_is_zero_when_ansi_precedes_indentation():
-    # Known limitation: depth is measured on the raw line before _strip_ansi, so a
-    # leading escape ahead of the tabs defeats the `lstrip("\t")` count and the row
-    # reports depth 0. Real `storage tree` output emits the tabs first (see
-    # _TREE_ANSI), so this only bites a hypothetical reordered escape.
+def test_parse_tree_depth_counts_tabs_when_ansi_precedes_indentation():
+    # ANSI is stripped before the depth count, so a leading escape ahead of the
+    # tabs no longer defeats the `lstrip("\t")` count: the row reports its real depth.
     assert _parse_tree("\x1b[33m\t[F] /ext/a.txt 10b\x1b[0m") == [
-        {"type": "file", "path": "/ext/a.txt", "size_bytes": 10, "depth": 0}
+        {"type": "file", "path": "/ext/a.txt", "size_bytes": 10, "depth": 1}
     ]
 
 
