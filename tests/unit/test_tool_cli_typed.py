@@ -6,7 +6,6 @@ from fastmcp.exceptions import ToolError
 
 from flipperzero_mcp.config import FlipperConfig
 from flipperzero_mcp.server import create_server
-from flipperzero_mcp.tools import _common
 from flipperzero_mcp.tools._common import cli_typed
 from flipperzero_mcp.tools.cli_typed import (
     _parse_free,
@@ -127,6 +126,14 @@ def test_parse_i2c_ignores_cells_past_the_16th_column():
     assert _parse_i2c("0 | - - - - - - - - - - - - - - - - 99") == []
 
 
+def test_parse_i2c_keeps_col_15_and_drops_col_16():
+    # Pins the `col >= 16` boundary on both sides: col 15 is the last valid low
+    # nibble (0x0f) and must be kept, while the 17th cell (col 16) overflows the
+    # grid and must be dropped. A `col >= 15` or `col > 16` mutation would fail this.
+    row = "0 | - - - - - - - - - - - - - - - 0f 99"
+    assert _parse_i2c(row) == ["0x0f"]
+
+
 def test_parse_loader_list_drops_headers_and_blanks():
     out = "Applications:\nSubGHz\nNFC\n\nPlugins:\nSnake Game"
     assert _parse_loader_list(out) == ["SubGHz", "NFC", "Snake Game"]
@@ -170,14 +177,26 @@ def test_parse_tree_depth_counts_tabs_when_ansi_precedes_indentation():
     ]
 
 
+def test_parse_tree_depth_counts_all_tabs_when_ansi_precedes_indentation():
+    # A leading escape before *multiple* tabs: stripping ANSI before the tab count
+    # lets `lstrip("\t")` see every tab, pinning "count all tabs" (depth 2 here)
+    # against an off-by-one that a single-tab row would not catch.
+    assert _parse_tree("\x1b[33m\t\t[F] /ext/a.txt 10b\x1b[0m") == [
+        {"type": "file", "path": "/ext/a.txt", "size_bytes": 10, "depth": 2}
+    ]
+
+
 # --- tool end-to-end ---------------------------------------------------------
 
 
 class FakeTransport:
-    def __init__(self, supports_cli=True, *, connected=True, can_connect=True):
+    def __init__(
+        self, supports_cli=True, *, connected=True, can_connect=True, is_connected_raises=None
+    ):
         self._supports_cli = supports_cli
         self._connected = connected
         self._can_connect = can_connect
+        self._is_connected_raises = is_connected_raises
 
     @property
     def supports_cli_text_mode(self):
@@ -196,6 +215,8 @@ class FakeTransport:
         return None
 
     async def is_connected(self):
+        if self._is_connected_raises is not None:
+            raise self._is_connected_raises
         return self._connected
 
 
@@ -207,6 +228,7 @@ def _server(
     completed=True,
     connected=True,
     can_connect=True,
+    is_connected_raises=None,
 ):
     """Build a server whose client.cli_exec replays `outputs` keyed by command."""
 
@@ -225,7 +247,10 @@ def _server(
     monkeypatch.setattr(
         "flipperzero_mcp.server.get_transport",
         lambda _t, _c: FakeTransport(
-            supports_cli=supports_cli, connected=connected, can_connect=can_connect
+            supports_cli=supports_cli,
+            connected=connected,
+            can_connect=can_connect,
+            is_connected_raises=is_connected_raises,
         ),
     )
     monkeypatch.setattr("flipperzero_mcp.rpc.client.FlipperClient.cli_exec", fake_cli_exec)
@@ -312,11 +337,13 @@ async def test_cli_typed_surfaces_not_connected_as_toolerror(monkeypatch):
 
 
 async def test_cli_typed_surfaces_unexpected_error_as_toolerror(monkeypatch):
-    # The catch-all path: a non-Flipper exception out of ensure_connected is still
-    # mapped to a ToolError, so no error path returns None.
-    async def boom(_ctx):
-        raise RuntimeError("usb fell out")
-
-    monkeypatch.setattr(_common, "ensure_connected", boom)
-    with pytest.raises(ToolError, match="unexpected error"):
-        await _common.cli_typed(None, "free")
+    # The catch-all path: a non-Flipper exception escaping the real ensure_connected
+    # seam is still mapped to a ToolError, so no error path returns None. A ValueError
+    # from transport.is_connected() is not one of the (OSError, RuntimeError) drops
+    # ensure_connected tolerates, so it propagates to the catch-all. Driven through the
+    # transport, not by monkeypatching the helper, so the test couples to the contract
+    # rather than the helper name.
+    server = _server(monkeypatch, {"free": _FREE}, is_connected_raises=ValueError("usb fell out"))
+    async with Client(server) as client:
+        with pytest.raises(ToolError, match="unexpected error"):
+            await client.call_tool("flipperzero_core_status", {})
