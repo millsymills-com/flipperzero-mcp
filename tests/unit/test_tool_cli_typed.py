@@ -13,15 +13,30 @@ from flipperzero_mcp.tools.cli_typed import (
     _parse_tree,
 )
 
-# Real device output captured over USB (see PR notes); ANSI escapes preserved.
+# Real device output captured over USB (see PR notes). This `free` output carries
+# no ANSI; the `_ANSI`-bearing variants below exercise the `_strip_ansi` path.
 _FREE = (
     "Free heap size: 120488\nTotal heap size: 189648\nMinimum heap size: 110144\n"
+    "Maximum heap block: 108784\nPool free: 1092\nMaximum pool block: 888"
+)
+# Same fields wrapped in SGR color escapes, as a color-enabled shell would emit.
+_FREE_ANSI = (
+    "\x1b[36mFree heap size:\x1b[0m \x1b[32m120488\x1b[0m\n"
+    "Total heap size: 189648\nMinimum heap size: 110144\n"
     "Maximum heap block: 108784\nPool free: 1092\nMaximum pool block: 888"
 )
 _TREE = (
     "[D] /ext/badusb\n\t[D] /ext/badusb/Demos\n"
     "\t[F] /ext/badusb/Demos/demo_macos.txt 1636b\n"
     "\t[F] /ext/badusb/Demos/test_mouse.txt 628b"
+)
+# A tab-indented `[F]` row whose content is color-wrapped after the indentation.
+_TREE_ANSI = "\t[F] \x1b[33m/ext/badusb/Demos/demo_macos.txt\x1b[0m 1636b"
+# Same `i2c` grid as _I2C_ONE with the responding cell color-wrapped.
+_I2C_ANSI = (
+    "  | 0 1 2 3 4 5 6 7 8 9 A B C D E F\n"
+    "--+--------------------------------\n"
+    "6 | - - - - - - - - \x1b[32m68\x1b[0m - - - - - - - "
 )
 _APP_OPEN_UPTIME = "\x1b[31mthis command cannot be run while an application is open\x1b[0m"
 # Real `i2c` scan grid: 16 columns (low nibble), rows are the high nibble.
@@ -107,6 +122,46 @@ def test_parse_i2c_ignores_rows_outside_7bit_space():
 def test_parse_loader_list_drops_headers_and_blanks():
     out = "Applications:\nSubGHz\nNFC\n\nPlugins:\nSnake Game"
     assert _parse_loader_list(out) == ["SubGHz", "NFC", "Snake Game"]
+
+
+# --- ANSI-bearing fixtures (the _strip_ansi path) ----------------------------
+
+
+def test_parse_free_strips_ansi_escapes():
+    assert _parse_free(_FREE_ANSI) == _parse_free(_FREE)
+
+
+def test_parse_i2c_strips_ansi_escapes():
+    assert _parse_i2c(_I2C_ANSI) == ["0x68"]
+
+
+def test_parse_tree_strips_ansi_with_correct_depth():
+    # ANSI wraps the content *after* the leading tab, so depth (counted on tabs)
+    # is unaffected and the path/size still parse cleanly.
+    assert _parse_tree(_TREE_ANSI) == [
+        {
+            "type": "file",
+            "path": "/ext/badusb/Demos/demo_macos.txt",
+            "size_bytes": 1636,
+            "depth": 1,
+        }
+    ]
+
+
+def test_parse_tree_file_without_size_has_none_size():
+    assert _parse_tree("[F] /ext/badusb/script.txt") == [
+        {"type": "file", "path": "/ext/badusb/script.txt", "size_bytes": None, "depth": 0}
+    ]
+
+
+def test_parse_tree_depth_is_zero_when_ansi_precedes_indentation():
+    # Known limitation: depth is measured on the raw line before _strip_ansi, so a
+    # leading escape ahead of the tabs defeats the `lstrip("\t")` count and the row
+    # reports depth 0. Real `storage tree` output emits the tabs first (see
+    # _TREE_ANSI), so this only bites a hypothetical reordered escape.
+    assert _parse_tree("\x1b[33m\t[F] /ext/a.txt 10b\x1b[0m") == [
+        {"type": "file", "path": "/ext/a.txt", "size_bytes": 10, "depth": 0}
+    ]
 
 
 # --- tool end-to-end ---------------------------------------------------------
@@ -225,3 +280,31 @@ async def test_cli_typed_refuses_gated_command(command):
 
     with pytest.raises(ToolError, match="benign-only"):
         await cli_typed(None, command)
+
+
+async def test_cli_typed_surfaces_not_connected_as_toolerror(monkeypatch):
+    # When the device is unreachable, ensure_connected raises and cli_typed must
+    # surface a clean ToolError via _classify_client_error -- never fall through
+    # to an implicit None return.
+    from flipperzero_mcp.errors import FlipperNotConnectedError
+    from flipperzero_mcp.tools import _common
+
+    async def boom(_ctx):
+        raise FlipperNotConnectedError("device unavailable")
+
+    monkeypatch.setattr(_common, "ensure_connected", boom)
+    with pytest.raises(ToolError, match="not connected"):
+        await _common.cli_typed(None, "free")
+
+
+async def test_cli_typed_surfaces_unexpected_error_as_toolerror(monkeypatch):
+    # The catch-all path: a non-Flipper exception out of ensure_connected is still
+    # mapped to a ToolError, so no error path returns None.
+    from flipperzero_mcp.tools import _common
+
+    async def boom(_ctx):
+        raise RuntimeError("usb fell out")
+
+    monkeypatch.setattr(_common, "ensure_connected", boom)
+    with pytest.raises(ToolError, match="unexpected error"):
+        await _common.cli_typed(None, "free")
