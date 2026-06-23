@@ -34,7 +34,9 @@ _NEGOTIATION_COOLDOWN_SECONDS = 5.0
 try:
     from flipperzero_mcp.rpc.protobuf_gen import (
         application_pb2,
+        desktop_pb2,
         flipper_pb2,
+        gpio_pb2,
         property_pb2,
         storage_pb2,
         system_pb2,
@@ -47,7 +49,9 @@ except ImportError:
         # For type checking only
         from flipperzero_mcp.rpc.protobuf_gen import (
             application_pb2,
+            desktop_pb2,
             flipper_pb2,
+            gpio_pb2,
             property_pb2,
             storage_pb2,
             system_pb2,
@@ -58,6 +62,8 @@ except ImportError:
         property_pb2 = None
         storage_pb2 = None
         application_pb2 = None
+        desktop_pb2 = None
+        gpio_pb2 = None
 
 
 class ProtobufRPC:
@@ -410,6 +416,120 @@ class ProtobufRPC:
                     return resp.system_ping_response.data
             except Exception:
                 logger.debug("ping failed", exc_info=True)
+            return None
+
+    async def app_lock_status(self) -> bool | None:
+        """Return whether an app currently holds the system lock, or None on error."""
+        async with self._io_lock:
+            try:
+                main_request = flipper_pb2.Main()
+                main_request.command_id = self._get_next_command_id()
+                main_request.has_next = False
+                main_request.app_lock_status_request.CopyFrom(application_pb2.LockStatusRequest())
+                resp = await self._send_rpc_message(main_request)
+                if (
+                    resp
+                    and resp.command_status == flipper_pb2.CommandStatus.OK
+                    and resp.HasField("app_lock_status_response")
+                ):
+                    return resp.app_lock_status_response.locked
+            except Exception:
+                logger.debug("app_lock_status failed", exc_info=True)
+            return None
+
+    async def app_get_error(self) -> dict[str, Any] | None:
+        """Return the last app error ``{code, text}``, or None on error."""
+        async with self._io_lock:
+            try:
+                main_request = flipper_pb2.Main()
+                main_request.command_id = self._get_next_command_id()
+                main_request.has_next = False
+                main_request.app_get_error_request.CopyFrom(application_pb2.GetErrorRequest())
+                resp = await self._send_rpc_message(main_request)
+                if (
+                    resp
+                    and resp.command_status == flipper_pb2.CommandStatus.OK
+                    and resp.HasField("app_get_error_response")
+                ):
+                    err = resp.app_get_error_response
+                    return {"code": err.code, "text": err.text}
+            except Exception:
+                logger.debug("app_get_error failed", exc_info=True)
+            return None
+
+    async def desktop_is_locked(self) -> bool | None:
+        """Return the desktop lock state, or None on an unexpected/failed response.
+
+        The firmware answers ``IsLockedRequest`` with an empty body and signals
+        state through ``command_status``: ``OK`` when locked, ``ERROR`` when
+        unlocked (verified against flipperzero-firmware ``rpc_desktop.c``).
+        """
+        async with self._io_lock:
+            try:
+                main_request = flipper_pb2.Main()
+                main_request.command_id = self._get_next_command_id()
+                main_request.has_next = False
+                main_request.desktop_is_locked_request.CopyFrom(desktop_pb2.IsLockedRequest())
+                resp = await self._send_rpc_message(main_request)
+                if resp is None:
+                    return None
+                if resp.command_status == flipper_pb2.CommandStatus.OK:
+                    return True
+                if resp.command_status == flipper_pb2.CommandStatus.ERROR:
+                    return False
+            except Exception:
+                logger.debug("desktop_is_locked failed", exc_info=True)
+            return None
+
+    async def gpio_read(self, pin: int) -> dict[str, Any] | None:
+        """Return ``{pin, mode, value}`` for a GPIO pin, or None on a link failure.
+
+        The firmware only reports a pin mode once the pin has been configured and
+        only allows reading a level on an ``input`` pin. An unconfigured pin
+        therefore reports ``mode="unconfigured"`` and ``value=None``; a pin
+        configured as ``output`` reports its mode with ``value=None``.
+        """
+        async with self._io_lock:
+            try:
+                mode_req = flipper_pb2.Main()
+                mode_req.command_id = self._get_next_command_id()
+                mode_req.has_next = False
+                mode_req.gpio_get_pin_mode.pin = pin
+                mode_resp = await self._send_rpc_message(mode_req)
+                if mode_resp is None:
+                    return None
+                if mode_resp.command_status == flipper_pb2.CommandStatus.OK and mode_resp.HasField(
+                    "gpio_get_pin_mode_response"
+                ):
+                    mode = gpio_pb2.GpioPinMode.Name(
+                        mode_resp.gpio_get_pin_mode_response.mode
+                    ).lower()
+                elif (
+                    mode_resp.command_status
+                    == flipper_pb2.CommandStatus.ERROR_GPIO_UNKNOWN_PIN_MODE
+                ):
+                    mode = "unconfigured"
+                else:
+                    return None
+
+                value_req = flipper_pb2.Main()
+                value_req.command_id = self._get_next_command_id()
+                value_req.has_next = False
+                value_req.gpio_read_pin.pin = pin
+                value_resp = await self._send_rpc_message(value_req)
+                if value_resp is None:
+                    return None
+                if (
+                    value_resp.command_status == flipper_pb2.CommandStatus.OK
+                    and value_resp.HasField("gpio_read_pin_response")
+                ):
+                    value = value_resp.gpio_read_pin_response.value
+                else:
+                    value = None
+
+                return {"pin": pin, "mode": mode, "value": value}
+            except Exception:
+                logger.debug("gpio_read failed", exc_info=True)
             return None
 
     async def system_protobuf_version(self) -> dict[str, int] | None:
