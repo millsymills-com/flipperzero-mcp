@@ -15,3 +15,6 @@ htmlcov/
 .env
 firmware/tcp_uart_bridge/sdkconfig
 *.log
+.claude/settings.local.json
+.claude/worktrees/
+.hypothesis/
