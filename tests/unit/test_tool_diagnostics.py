@@ -46,6 +46,17 @@ async def test_system_ping_returns_echo(monkeypatch):
         assert result.data["echo"] == "ping"
 
 
+async def test_system_ping_replaces_non_utf8_echo(monkeypatch):
+    class BinaryRPC(FakeRPC):
+        async def ping(self, data=b"ping"):  # noqa: ARG002
+            return b"\xff\xfe"
+
+    async with Client(_server(monkeypatch, BinaryRPC)) as client:
+        result = await client.call_tool("flipperzero_system_ping", {})
+        assert result.data["responded"] is True
+        assert result.data["echo"] == b"\xff\xfe".decode("utf-8", errors="replace")
+
+
 async def test_system_ping_raises_when_no_response(monkeypatch):
     class DeadRPC(FakeRPC):
         async def ping(self, data=b"ping"):  # noqa: ARG002
