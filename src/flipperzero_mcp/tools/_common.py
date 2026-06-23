@@ -7,12 +7,13 @@ from typing import TYPE_CHECKING
 
 from fastmcp.exceptions import ToolError
 
-from flipperzero_mcp.errors import FlipperNotConnectedError
+from flipperzero_mcp.errors import FlipperNotConnectedError, _classify_client_error
+from flipperzero_mcp.rpc.cli_risk import classify
 
 if TYPE_CHECKING:
     from fastmcp import Context
 
-    from flipperzero_mcp.rpc.client import FlipperClient
+    from flipperzero_mcp.rpc.client import CliExecResult, FlipperClient
     from flipperzero_mcp.rpc.protobuf_rpc import ProtobufRPC
     from flipperzero_mcp.server import ServerContext
 
@@ -81,6 +82,35 @@ async def ensure_connected(ctx: Context) -> FlipperClient:
     if await client.connect():
         return client
     raise FlipperNotConnectedError(client.last_connection_error or "device unavailable")
+
+
+async def cli_typed(ctx: Context, command: str, *, timeout_s: float = 8.0) -> CliExecResult:
+    """Run one benign CLI command over USB and return its raw result (TP-3).
+
+    Shared by the typed CLI-text read tools. Reuses ``client.cli_exec`` and its
+    single ``_io_lock``-held exchange verbatim, passing no transmit gate, so a
+    gated subcommand can never hide behind a typed tool (it would evade the
+    per-command ``cli_risk`` prefix match). Each caller parses the raw ``output``.
+
+    Args:
+        ctx: FastMCP request context carrying the shared Flipper client.
+        command: Fixed benign CLI command line (one command, no shell chaining).
+        timeout_s: Seconds to wait for the ``>:`` prompt before returning.
+
+    Returns:
+        The raw CliExecResult (``output``, ``completed``, ``risk``, ``warning``).
+
+    Raises:
+        ToolError: If the command is gated, the device is unreachable, the
+            transport has no CLI text mode (WiFi), or the exchange fails.
+    """
+    if classify(command).gated:
+        raise ToolError(f"cli_typed is benign-only; refusing gated command: {command!r}")
+    try:
+        client = await ensure_connected(ctx)
+        return await client.cli_exec(command, timeout_s=timeout_s)
+    except Exception as e:
+        _classify_client_error(e)
 
 
 async def get_rpc(ctx: Context) -> ProtobufRPC:
