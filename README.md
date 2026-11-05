@@ -168,7 +168,8 @@ between firmware flavors — re-validate and re-record fixtures
 (`make record-fixtures`) after a firmware change.
 
 The protobuf runtime is pinned to `protobuf==7.35.1` in `pyproject.toml`.
-The vendored Python bindings were generated with protoc 6.33.2. Python
+The vendored bindings declare Python generated-code version 6.33.2
+(corresponding to protoc 33.2). Python
 [generated-code compatibility](https://protobuf.dev/support/cross-version-runtime-guarantee/#python-specific-guarantees)
 is broader than a matching major/minor requirement; validate imports and the
 offline RPC tests when updating the runtime (see `CLAUDE.md`).

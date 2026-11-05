@@ -34,7 +34,7 @@ or WiFi.
   state.
 - **Protobuf runtime is pinned to `protobuf==7.35.1`** in `pyproject.toml`.
   Vendored bindings in `src/flipperzero_mcp/rpc/protobuf_gen/` were generated
-  with protoc 6.33.2. Follow the upstream Python-specific compatibility
+  with Python generated-code version 6.33.2 (protoc 33.2). Follow the upstream Python-specific compatibility
   guarantee (https://protobuf.dev/support/cross-version-runtime-guarantee/#python-specific-guarantees),
   rather than requiring matching major/minor versions. Validate generated
   imports and offline RPC tests for runtime upgrades; regenerate bindings
