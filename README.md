@@ -167,7 +167,11 @@ fixtures (`tests/golden/`) were captured on Momentum `mntm-012` (protobuf RPC
 between firmware flavors — re-validate and re-record fixtures
 (`make record-fixtures`) after a firmware change.
 
-The protobuf runtime is pinned to `protobuf==6.33.5` (see `CLAUDE.md`).
+The protobuf runtime is pinned to `protobuf==7.35.1` in `pyproject.toml`.
+The vendored Python bindings were generated with protoc 6.33.2. Python
+[generated-code compatibility](https://protobuf.dev/support/cross-version-runtime-guarantee/#python-specific-guarantees)
+is broader than a matching major/minor requirement; validate imports and the
+offline RPC tests when updating the runtime (see `CLAUDE.md`).
 `flipperzero_system_info` returns a `firmware` block: `{flavor, version,
 origin_fork, origin_git, target}`.
 
