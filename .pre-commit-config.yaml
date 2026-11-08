@@ -34,3 +34,12 @@ repos:
         args: ["-c", "pyproject.toml", "-r", "src/flipperzero_mcp/"]
         additional_dependencies: ["bandit[toml]"]
         pass_filenames: false
+
+  - repo: local
+    hooks:
+      - id: claude-settings-guard
+        name: Check staged Claude settings
+        entry: python3 .github/security/check_claude_settings.py --staged
+        language: system
+        pass_filenames: false
+        always_run: true

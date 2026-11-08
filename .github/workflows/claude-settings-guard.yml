@@ -1,0 +1,27 @@
+name: Claude settings guard
+
+on:
+  pull_request:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  claude-settings-guard:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Test Claude settings guard
+        run: python3 -m unittest discover -s .github/security -p test_claude_settings.py
+      - name: Check tracked Claude settings and incoming history
+        env:
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: python3 .github/security/check_claude_settings.py --head "$HEAD_SHA" --base "$BASE_SHA"
