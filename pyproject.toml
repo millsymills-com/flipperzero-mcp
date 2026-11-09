@@ -22,9 +22,9 @@ classifiers = [
     "Typing :: Typed",
 ]
 dependencies = [
-    "fastmcp>=3.4.4,<4.0.0",
+    "fastmcp>=3.4.11,<4.0.0",
     "pyserial>=3.5",
-    "protobuf==7.36.0",
+    "protobuf==7.35.1",
     "pydantic>=2.13.3",
     "pydantic-settings>=2.14.0",
     "httpx>=0.28.1",
@@ -46,6 +46,29 @@ dev = [
 
 [project.scripts]
 flipperzero-mcp = "flipperzero_mcp.__main__:main"
+
+[tool.uv]
+# Patched transitive versions for the reproducible uv environment. These
+# constraints do not replace package metadata for other installers.
+constraint-dependencies = [
+    "python-multipart>=0.0.27",
+    "setuptools>=84.1.0",
+    "anyio>=4.14.2",
+    "authlib>=1.9.1",
+    "certifi>=2026.10.19",
+    "cryptography>=50.0.2",
+    "dnspython>=2.9.0",
+    "filelock>=4.2.9",
+    "joserfc>=1.7.6",
+    "mcp>=1.30.0,<2",
+    "msgpack>=1.2.3",
+    "opentelemetry-api>=1.45.1",
+    "pip>=26.2.2",
+    "pyjwt>=2.15.1",
+    "urllib3>=2.8.0",
+    "virtualenv>=21.14.13",
+]
+
 
 [tool.ruff]
 target-version = "py313"
