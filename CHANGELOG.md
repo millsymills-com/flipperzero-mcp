@@ -6,6 +6,9 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+- Preserve the supplied exception and traceback when logging unexpected tool errors outside an active exception handler.
+
 ### Added
 - `FLIPPER_ENABLE_WRITE_TOOLS` env flag (default-off) gating the device-mutating
   storage writes `flipperzero_fs_push` and `flipperzero_fs_mkdir`. Declares the
