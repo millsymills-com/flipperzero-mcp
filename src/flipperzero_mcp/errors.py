@@ -66,5 +66,5 @@ def _classify_client_error(error: Exception) -> NoReturn:
         raise ToolError(f"CLI command refused: {error}.") from error
     if isinstance(error, FlipperError):
         raise ToolError(f"Flipper error: {error}.") from error
-    logger.exception("Unexpected error in tool")
+    logger.error("Unexpected error in tool", exc_info=error)
     raise ToolError(f"unexpected error: {error}.") from error
