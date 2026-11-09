@@ -2,7 +2,7 @@ name: ci
 on:
   pull_request:
   push:
-    branches: [main]
+    branches: [phase1]
 permissions:
   contents: read
 jobs:
@@ -15,11 +15,12 @@ jobs:
       - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d  # v10.0.1
         with:
           enable-cache: true
-      - run: uv sync --extra dev
-      - run: uv run ruff check src/ tests/
-      - run: uv run ruff format --check src/ tests/
-      - run: uv run ty check src/flipperzero_mcp/
-      - run: uv run bandit -r src/flipperzero_mcp/ -c pyproject.toml
+          python-version: "3.13"
+      - run: uv sync --frozen --extra dev
+      - run: uv run --frozen ruff check src/ tests/
+      - run: uv run --frozen ruff format --check src/ tests/
+      - run: uv run --frozen ty check src/flipperzero_mcp/
+      - run: uv run --frozen bandit -r src/flipperzero_mcp/ -c pyproject.toml
   test:
     runs-on: ubuntu-latest
     steps:
@@ -30,8 +31,8 @@ jobs:
         with:
           enable-cache: true
           python-version: "3.13"
-      - run: uv sync --extra dev
-      - run: uv run pytest -m "not integration" --cov=flipperzero_mcp --cov-report=term --cov-fail-under=80
+      - run: uv sync --frozen --extra dev
+      - run: uv run --frozen pytest -m "not integration" --cov=flipperzero_mcp --cov-report=term --cov-fail-under=80
   audit:
     runs-on: ubuntu-latest
     steps:
@@ -39,6 +40,8 @@ jobs:
         with:
           persist-credentials: false
       - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d  # v10.0.1
-      - run: uv sync --extra dev
-      - run: uv run pip-audit
+        with:
+          python-version: "3.13"
+      - run: uv sync --frozen --extra dev
+      - run: uv run --frozen pip-audit
       - run: pipx run zizmor==1.24.1 .github/workflows/
